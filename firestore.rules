@@ -1,0 +1,307 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Global Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified() && request.auth.token.email == 'alansaputra.AS9@gmail.com';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isProjectOwner(projectId) {
+      return isVerified() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid;
+    }
+
+    function isProjectActiveForWrite(projectId) {
+      return existsAfter(/databases/$(database)/documents/projects/$(projectId)) &&
+        getAfter(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/projects/$(projectId)).data.status != 'completed';
+    }
+
+    function isValidDivisionBreakdown(m) {
+      return m is map &&
+        m.keys().hasAll(['dist', 'aga', 'te', 'total']) &&
+        m.keys().hasOnly(['dist', 'aga', 'te', 'total']) &&
+        m.dist is number && m.dist >= -10000000 && m.dist <= 10000000 &&
+        m.aga is number && m.aga >= -10000000 && m.aga <= 10000000 &&
+        m.te is number && m.te >= -10000000 && m.te <= 10000000 &&
+        m.total is number && m.total >= -10000000 && m.total <= 10000000;
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidProject(data) {
+      return data.keys().hasAll(['name', 'location', 'managerName', 'status', 'ownerId', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['name', 'location', 'managerName', 'status', 'ownerId', 'createdAt', 'updatedAt']) &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 100 &&
+        data.location is string && data.location.size() >= 2 && data.location.size() <= 120 &&
+        data.managerName is string && data.managerName.size() >= 2 && data.managerName.size() <= 80 &&
+        data.status in ['active', 'paused', 'completed'] &&
+        isValidId(data.ownerId) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMaterial(data, projectId) {
+      return data.keys().hasAll([
+          'projectId', 'ownerId', 'rowNumber', 'sku', 'name', 'category', 'unit',
+          'currentStock', 'stokAwal', 'materialMasuk', 'materialKeluar', 'stokAkhir',
+          'minThreshold', 'criticalThreshold', 'maxCapacity',
+          'unitPrice', 'supplierName', 'warehouseZone', 'notes', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'projectId', 'ownerId', 'rowNumber', 'sku', 'name', 'category', 'unit',
+          'currentStock', 'stokAwal', 'materialMasuk', 'materialKeluar', 'stokAkhir',
+          'minThreshold', 'criticalThreshold', 'maxCapacity',
+          'unitPrice', 'supplierName', 'warehouseZone', 'notes', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.projectId) && data.projectId == projectId &&
+        isValidId(data.ownerId) &&
+        data.rowNumber is number && data.rowNumber >= 0 && data.rowNumber <= 1000000 &&
+        data.sku is string && data.sku.size() >= 2 && data.sku.size() <= 32 && data.sku.matches('^[a-zA-Z0-9\\-_]+$') &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        data.category in [
+          'kWh Meter & AMR',
+          'MCB, Fuse & Proteksi',
+          'Kabel & Konduktor',
+          'Box, Panel & LVSB',
+          'Tiang, Isolator & Konektor',
+          'Peralatan & Aksesoris'
+        ] &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+        data.currentStock is number && data.currentStock >= 0 && data.currentStock <= 10000000 &&
+        isValidDivisionBreakdown(data.stokAwal) &&
+        isValidDivisionBreakdown(data.materialMasuk) &&
+        isValidDivisionBreakdown(data.materialKeluar) &&
+        isValidDivisionBreakdown(data.stokAkhir) &&
+        data.minThreshold is number && data.minThreshold >= 0 && data.minThreshold <= 10000000 &&
+        data.criticalThreshold is number && data.criticalThreshold >= 0 && data.criticalThreshold <= 10000000 &&
+        data.criticalThreshold <= data.minThreshold &&
+        data.maxCapacity is number && data.maxCapacity > 0 && data.maxCapacity <= 10000000 &&
+        data.unitPrice is number && data.unitPrice >= 0 && data.unitPrice <= 1000000000 &&
+        data.supplierName is string && data.supplierName.size() >= 2 && data.supplierName.size() <= 80 &&
+        data.warehouseZone is string && data.warehouseZone.size() >= 1 && data.warehouseZone.size() <= 60 &&
+        data.notes is string && data.notes.size() <= 240 &&
+        data.status in ['nominal', 'low', 'critical', 'out'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidMovement(data, projectId) {
+      return data.keys().hasAll([
+          'projectId', 'ownerId', 'materialId', 'materialName', 'materialSku',
+          'unit', 'division', 'type', 'quantity', 'previousStock', 'newStock',
+          'referenceNo', 'actorName', 'notes', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'projectId', 'ownerId', 'materialId', 'materialName', 'materialSku',
+          'unit', 'division', 'type', 'quantity', 'previousStock', 'newStock',
+          'referenceNo', 'actorName', 'notes', 'createdAt'
+        ]) &&
+        isValidId(data.projectId) && data.projectId == projectId &&
+        isValidId(data.ownerId) &&
+        isValidId(data.materialId) &&
+        data.materialName is string && data.materialName.size() >= 1 && data.materialName.size() <= 120 &&
+        data.materialSku is string && data.materialSku.size() >= 1 && data.materialSku.size() <= 32 && data.materialSku.matches('^[a-zA-Z0-9\\-_]+$') &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+        data.division in ['DIST', 'AGA', 'TE', 'UMUM'] &&
+        data.type in ['in', 'out', 'adjustment'] &&
+        data.quantity is number && data.quantity > 0 && data.quantity <= 1000000 &&
+        data.previousStock is number && data.previousStock >= 0 && data.previousStock <= 10000000 &&
+        data.newStock is number && data.newStock >= 0 && data.newStock <= 10000000 &&
+        data.referenceNo is string && data.referenceNo.size() >= 1 && data.referenceNo.size() <= 50 &&
+        data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 80 &&
+        data.notes is string && data.notes.size() <= 240 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidNotification(data, projectId) {
+      return data.keys().hasAll([
+          'projectId', 'ownerId', 'materialId', 'materialName', 'materialSku',
+          'severity', 'title', 'message', 'currentStock', 'threshold', 'unit',
+          'isRead', 'isResolved', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'projectId', 'ownerId', 'materialId', 'materialName', 'materialSku',
+          'severity', 'title', 'message', 'currentStock', 'threshold', 'unit',
+          'isRead', 'isResolved', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.projectId) && data.projectId == projectId &&
+        isValidId(data.ownerId) &&
+        isValidId(data.materialId) &&
+        data.materialName is string && data.materialName.size() >= 1 && data.materialName.size() <= 120 &&
+        data.materialSku is string && data.materialSku.size() >= 1 && data.materialSku.size() <= 32 && data.materialSku.matches('^[a-zA-Z0-9\\-_]+$') &&
+        data.severity in ['warning', 'critical', 'out_of_stock', 'restocked'] &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 140 &&
+        data.message is string && data.message.size() >= 2 && data.message.size() <= 320 &&
+        data.currentStock is number && data.currentStock >= 0 && data.currentStock <= 10000000 &&
+        data.threshold is number && data.threshold >= 0 && data.threshold <= 10000000 &&
+        data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+        data.isRead is bool &&
+        data.isResolved is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 4. Projects Collection
+    match /projects/{projectId} {
+      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow get: if isValidId(projectId) && isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      allow create: if isValidId(projectId) &&
+        isVerified() &&
+        isValidProject(incoming()) &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(projectId) &&
+        isVerified() &&
+        isValidProject(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isBootstrappedAdmin() ||
+          (
+            existing().ownerId == request.auth.uid &&
+            existing().status != 'completed' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'location', 'managerName', 'status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(projectId) &&
+        isVerified() &&
+        (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+
+      // 5. Materials Subcollection
+      match /materials/{materialId} {
+        allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+        allow get: if isValidId(projectId) && isValidId(materialId) && isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin());
+
+        allow create: if isValidId(projectId) &&
+          isValidId(materialId) &&
+          isVerified() &&
+          isValidMaterial(incoming(), projectId) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin());
+
+        allow update: if isValidId(projectId) &&
+          isValidId(materialId) &&
+          isVerified() &&
+          isValidMaterial(incoming(), projectId) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()) &&
+          (
+            // Action: Stock movement adjustment across DIST/AGA/TE
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'currentStock', 'materialMasuk', 'materialKeluar', 'stokAkhir', 'status', 'updatedAt'
+            ]) ||
+            // Action: Material metadata & threshold configuration update
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'rowNumber', 'name', 'category', 'unit', 'minThreshold', 'criticalThreshold',
+              'maxCapacity', 'unitPrice', 'supplierName', 'warehouseZone', 'notes', 'status', 'updatedAt'
+            ]) ||
+            // Action: Google Sheets full row sync
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'rowNumber', 'name', 'category', 'unit', 'currentStock',
+              'stokAwal', 'materialMasuk', 'materialKeluar', 'stokAkhir',
+              'minThreshold', 'criticalThreshold', 'maxCapacity', 'unitPrice',
+              'supplierName', 'warehouseZone', 'notes', 'status', 'updatedAt'
+            ])
+          );
+
+        allow delete: if isValidId(projectId) &&
+          isValidId(materialId) &&
+          isVerified() &&
+          (isProjectOwner(projectId) || isBootstrappedAdmin());
+      }
+
+      // 6. Stock Movements Subcollection (Immutable Audit Ledger with Atomic Sync)
+      match /movements/{movementId} {
+        allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+        allow get: if isValidId(projectId) && isValidId(movementId) && isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin());
+
+        allow create: if isValidId(projectId) &&
+          isValidId(movementId) &&
+          isVerified() &&
+          isValidMovement(incoming(), projectId) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()) &&
+          existsAfter(/databases/$(database)/documents/projects/$(projectId)/materials/$(incoming().materialId)) &&
+          getAfter(/databases/$(database)/documents/projects/$(projectId)/materials/$(incoming().materialId)).data.updatedAt == request.time;
+
+        allow update: if false;
+        allow delete: if isValidId(projectId) &&
+          isValidId(movementId) &&
+          isVerified() &&
+          (isProjectOwner(projectId) || isBootstrappedAdmin());
+      }
+
+      // 7. Automatic Notifications Subcollection
+      match /notifications/{notificationId} {
+        allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+        allow get: if isValidId(projectId) && isValidId(notificationId) && isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin());
+
+        allow create: if isValidId(projectId) &&
+          isValidId(notificationId) &&
+          isVerified() &&
+          isValidNotification(incoming(), projectId) &&
+          incoming().ownerId == request.auth.uid &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin());
+
+        allow update: if isValidId(projectId) &&
+          isValidId(notificationId) &&
+          isVerified() &&
+          isValidNotification(incoming(), projectId) &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().projectId == existing().projectId &&
+          incoming().materialId == existing().materialId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (isProjectOwner(projectId) || isBootstrappedAdmin()) &&
+          (
+            // Action: Mark read or resolve alert
+            incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'isResolved', 'updatedAt'])
+          );
+
+        allow delete: if isValidId(projectId) &&
+          isValidId(notificationId) &&
+          isVerified() &&
+          (isProjectOwner(projectId) || isBootstrappedAdmin());
+      }
+    }
+  }
+}

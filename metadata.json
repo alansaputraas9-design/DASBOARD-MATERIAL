@@ -1,0 +1,6 @@
+{
+  "name": "BinaLogistik — Monitoring Material Konstruksi Real-Time",
+  "description": "Dasbor pemantauan stok material konstruksi real-time terintegrasi database Firestore dengan pencatatan mutasi barang dan notifikasi otomatis batas stok.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
