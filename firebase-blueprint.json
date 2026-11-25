@@ -379,7 +379,7 @@
   "firestore": {
     "/projects/{projectId}": {
       "schema": { "$ref": "#/entities/Project" },
-      "description": "Warehouse monitoring projects owned by authenticated users."
+      "description": "Public & shared warehouse monitoring projects accessible without login."
     },
     "/projects/{projectId}/materials/{materialId}": {
       "schema": { "$ref": "#/entities/Material" },

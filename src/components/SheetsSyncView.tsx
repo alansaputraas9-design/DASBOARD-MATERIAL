@@ -10,26 +10,17 @@ import {
   Upload,
 } from 'lucide-react';
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  computeMaterialStatus,
-  hasMaterialActivity,
-  MaterialFormInput,
-  SheetSyncResult,
-} from '../services/inventoryService';
+import { AUTO_SYNC_INTERVAL_MS, computeMaterialStatus, hasMaterialActivity, MaterialFormInput, SheetSyncResult } from '../services/inventoryService';
 import {
   autoMapColumns,
   ColumnMapping,
   DEFAULT_SPREADSHEET_URL,
   detectHeaderAndRows,
-  fetchCombinedSheetTabs,
   fetchPublishedCsvValues,
-  fetchSheetValues,
-  fetchSpreadsheetMetadata,
-  isPublishedCsvUrl,
   mapSheetRowsToMaterials,
   parseDelimitedText,
-  parseGoogleSheetUrl,
   PUBLISHED_SHEET_CSV_URL,
+  resolvePublicCsvUrl,
   SHEET_PRESETS,
   SpreadsheetMetadata,
 } from '../services/sheetsService';
@@ -38,8 +29,6 @@ import { DonutChart, GroupedBarChart } from './Charts';
 import { MaterialStatusIndicator } from './StatusText';
 
 interface SheetsSyncViewProps {
-  accessToken: string | null;
-  onReconnectGoogle: () => Promise<string | null>;
   activeProjectName: string;
   isCompleted: boolean;
   existingMaterials: Material[];
@@ -61,8 +50,6 @@ interface SheetsSyncViewProps {
 const STORAGE_KEY_URL = 'binalogistik-sheet-url-v2';
 
 export function SheetsSyncView({
-  accessToken,
-  onReconnectGoogle,
   activeProjectName,
   isCompleted,
   existingMaterials,
@@ -94,8 +81,8 @@ export function SheetsSyncView({
 
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [syncingDb, setSyncingDb] = useState(false);
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
   const [lastSyncInfo, setLastSyncInfo] = useState<{
     time: string;
     result?: SheetSyncResult;
@@ -114,13 +101,21 @@ export function SheetsSyncView({
     }
   }, [sheetUrl]);
 
-  const loadCsvUrl = useCallback(async (targetUrl: string) => {
-    setLoadingSheet(true);
+  const loadCsvUrl = useCallback(async (targetUrl: string, silent = false) => {
+    const resolved = resolvePublicCsvUrl(targetUrl);
+    if (!resolved) {
+      setError('Link Google Sheets tidak valid. Gunakan link publikasi CSV Google Sheets.');
+      return;
+    }
+
+    if (!silent) {
+      setLoadingSheet(true);
+    }
     setError(null);
     setCombinedMaterials(null);
     setCombinedTabSummaries([]);
     try {
-      const values = await fetchPublishedCsvValues(targetUrl);
+      const values = await fetchPublishedCsvValues(resolved);
       const detected = detectHeaderAndRows(values);
       setMetadata({
         spreadsheetId: 'published-csv',
@@ -131,128 +126,35 @@ export function SheetsSyncView({
       setHeaders(detected.headers);
       setRawRows(detected.rawRows);
       setMapping(autoMapColumns(detected.headers));
+      setLastFetchedAt(new Date());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal membaca link CSV Google Sheets.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Gagal membaca link CSV Google Sheets. Pastikan sheet dipublikasikan ke web (CSV).'
+      );
     } finally {
-      setLoadingSheet(false);
+      if (!silent) {
+        setLoadingSheet(false);
+      }
     }
   }, []);
 
-  const loadSheetData = useCallback(
-    async (targetUrl: string, tokenOverride?: string | null, explicitTabTitle?: string) => {
-      if (isPublishedCsvUrl(targetUrl)) {
-        await loadCsvUrl(targetUrl);
-        return;
-      }
-
-      const token = tokenOverride ?? accessToken;
-      if (!token) {
-        setError('Untuk link editor Google Sheets non-CSV, klik "Hubungkan Google Sheets" terlebih dahulu.');
-        return;
-      }
-
-      const { spreadsheetId, gid } = parseGoogleSheetUrl(targetUrl);
-      if (!spreadsheetId) {
-        setError('Link Google Sheets tidak valid. Gunakan link publikasi CSV atau URL spreadsheet.');
-        return;
-      }
-
-      setLoadingSheet(true);
-      setError(null);
-      setCombinedMaterials(null);
-      setCombinedTabSummaries([]);
-
-      try {
-        const meta = await fetchSpreadsheetMetadata(spreadsheetId, token);
-        setMetadata(meta);
-
-        if (meta.sheets.length === 0) {
-          setError('Spreadsheet tidak memiliki tab sheet yang dapat dibaca.');
-          setLoadingSheet(false);
-          return;
-        }
-
-        let targetTab = explicitTabTitle
-          ? meta.sheets.find((s) => s.title === explicitTabTitle)
-          : undefined;
-
-        if (!targetTab && gid !== null) {
-          targetTab = meta.sheets.find((s) => s.sheetId === gid);
-        }
-        if (!targetTab) {
-          targetTab = meta.sheets[0];
-        }
-
-        setSelectedSheetTitle(targetTab.title);
-        const values = await fetchSheetValues(spreadsheetId, targetTab.title, token);
-        const detected = detectHeaderAndRows(values);
-        setHeaders(detected.headers);
-        setRawRows(detected.rawRows);
-        setMapping(autoMapColumns(detected.headers));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Gagal membaca spreadsheet.';
-        if (msg === 'AUTH_EXPIRED') {
-          setError('Sesi akses Google Sheets telah kedaluwarsa. Klik "Hubungkan Google Sheets" untuk memperbarui akses.');
-        } else {
-          setError(msg);
-        }
-      } finally {
-        setLoadingSheet(false);
-      }
-    },
-    [accessToken, loadCsvUrl]
-  );
-
-  const loadCombinedTabsData = useCallback(
-    async (token: string, targetUrl: string) => {
-      const { spreadsheetId } = parseGoogleSheetUrl(targetUrl);
-      if (!spreadsheetId) {
-        setError('Link Google Sheets tidak valid.');
-        return;
-      }
-
-      setLoadingSheet(true);
-      setError(null);
-
-      try {
-        const meta = await fetchSpreadsheetMetadata(spreadsheetId, token);
-        setMetadata(meta);
-        if (meta.sheets.length === 0) {
-          setError('Spreadsheet tidak memiliki tab sheet yang dapat dibaca.');
-          return;
-        }
-        const result = await fetchCombinedSheetTabs(spreadsheetId, meta.sheets, token);
-        setSelectedSheetTitle('__ALL__');
-        setCombinedMaterials(result.materials);
-        setCombinedTabSummaries(result.tabSummaries);
-        setHeaders([]);
-        setRawRows([]);
-        setMapping(autoMapColumns([]));
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Gagal menggabungkan tab spreadsheet.';
-        if (msg === 'AUTH_EXPIRED') {
-          setError('Sesi akses Google Sheets telah kedaluwarsa. Klik "Hubungkan Google Sheets" untuk memperbarui akses.');
-        } else {
-          setError(msg);
-        }
-      } finally {
-        setLoadingSheet(false);
-      }
-    },
-    []
-  );
-
-  // Auto-fetch live CSV preview when opening this tab
+  // Auto-fetch live CSV preview when opening this tab and refresh every 10 minutes
   useEffect(() => {
-    if (initialLoadedRef.current) return;
-    if (isPublishedCsvUrl(sheetUrl)) {
+    if (!initialLoadedRef.current) {
       initialLoadedRef.current = true;
-      loadCsvUrl(sheetUrl);
-    } else if (accessToken) {
-      initialLoadedRef.current = true;
-      loadSheetData(sheetUrl, accessToken);
+      if (resolvePublicCsvUrl(sheetUrl)) {
+        loadCsvUrl(sheetUrl);
+      }
     }
-  }, [sheetUrl, accessToken, loadCsvUrl, loadSheetData]);
+    const timer = window.setInterval(() => {
+      if (resolvePublicCsvUrl(sheetUrl)) {
+        loadCsvUrl(sheetUrl, true);
+      }
+    }, AUTO_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [sheetUrl, loadCsvUrl]);
 
   const parsedMaterials = useMemo(() => {
     if (combinedMaterials) return combinedMaterials;
@@ -354,25 +256,6 @@ export function SheetsSyncView({
     return { groupedData, syncSegments };
   }, [parsedMaterials, activeParsedCount]);
 
-  async function handleConnectGoogle() {
-    setConnectingGoogle(true);
-    setError(null);
-    try {
-      const freshToken = await onReconnectGoogle();
-      if (freshToken) {
-        await loadSheetData(sheetUrl, freshToken);
-      } else {
-        setError('Izin baca Google Sheets tidak diberikan pada proses masuk.');
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Gagal menghubungkan akun Google Sheets.'
-      );
-    } finally {
-      setConnectingGoogle(false);
-    }
-  }
-
   async function handleCsvUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -448,8 +331,6 @@ export function SheetsSyncView({
     setMapping((prev) => (prev ? { ...prev, [key]: colIndex } : null));
   }
 
-  const csvMode = isPublishedCsvUrl(sheetUrl);
-
   return (
     <div className="space-y-5">
       {/* Spreadsheet Connection & URL Configuration */}
@@ -458,10 +339,19 @@ export function SheetsSyncView({
           <div>
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Integrasi Sumber Data Google Sheets (CSV Live &amp; API)</span>
+              <span>Integrasi Sumber Data Google Sheets (CSV Live Tanpa Login)</span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Terhubung langsung ke publikasi CSV <strong>Gd Ry Sinjai</strong> (No, Gudang, No Material, Nama Material, Satuan, Stok Awal, Material Masuk, Material Keluar, Stok Akhir per DIST/AGA/TE, Keterangan).
+              Terhubung langsung secara terbuka ke publikasi CSV <strong>Gd Ry Sinjai</strong> dengan auto-sinkronisasi setiap <strong>10 menit</strong>.
+              {lastFetchedAt && (
+                <>
+                  {' '}
+                  · Terbaca pukul{' '}
+                  <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                    {lastFetchedAt.toLocaleTimeString('id-ID')}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
@@ -491,11 +381,7 @@ export function SheetsSyncView({
                 type="button"
                 onClick={() => {
                   setSheetUrl(preset.url);
-                  if (preset.mode === 'csv') {
-                    loadCsvUrl(preset.url);
-                  } else if (accessToken) {
-                    loadSheetData(preset.url, accessToken);
-                  }
+                  loadCsvUrl(preset.url);
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap ${
                   isSelected
@@ -507,21 +393,6 @@ export function SheetsSyncView({
               </button>
             );
           })}
-
-          {accessToken && !csvMode && (
-            <button
-              type="button"
-              disabled={loadingSheet}
-              onClick={() => loadCombinedTabsData(accessToken, sheetUrl)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap ${
-                selectedSheetTitle === '__ALL__'
-                  ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-600 text-indigo-800 dark:text-indigo-300'
-                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              Gabung Semua Tab
-            </button>
-          )}
         </div>
 
         <div className="flex flex-col md:flex-row gap-2.5">
@@ -550,42 +421,15 @@ export function SheetsSyncView({
             <span>Upload CSV / TSV</span>
           </button>
 
-          {csvMode ? (
-            <button
-              type="button"
-              onClick={() => loadCsvUrl(sheetUrl)}
-              disabled={loadingSheet}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-cyan-700 hover:bg-cyan-800 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingSheet ? 'animate-spin' : ''}`} />
-              <span>{loadingSheet ? 'Memuat CSV...' : 'Muat CSV Live'}</span>
-            </button>
-          ) : !accessToken ? (
-            <button
-              type="button"
-              onClick={handleConnectGoogle}
-              disabled={connectingGoogle}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl shadow-xs transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
-            >
-              <span>
-                {connectingGoogle ? 'Menghubungkan...' : 'Hubungkan Google Sheets'}
-              </span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() =>
-                selectedSheetTitle === '__ALL__'
-                  ? loadCombinedTabsData(accessToken, sheetUrl)
-                  : loadSheetData(sheetUrl, accessToken)
-              }
-              disabled={loadingSheet}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-cyan-700 hover:bg-cyan-800 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingSheet ? 'animate-spin' : ''}`} />
-              <span>{loadingSheet ? 'Memuat...' : 'Muat Data Sheet'}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => loadCsvUrl(sheetUrl)}
+            disabled={loadingSheet}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-cyan-700 hover:bg-cyan-800 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingSheet ? 'animate-spin' : ''}`} />
+            <span>{loadingSheet ? 'Memuat CSV...' : 'Muat CSV Live'}</span>
+          </button>
         </div>
 
         {error && (
@@ -628,34 +472,6 @@ export function SheetsSyncView({
                 {metadata.title}
               </div>
             </div>
-
-            {metadata.sheets.length > 1 && accessToken && (
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                  Tab Sheet:
-                </label>
-                <select
-                  value={selectedSheetTitle}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (!accessToken) return;
-                    if (val === '__ALL__') {
-                      loadCombinedTabsData(accessToken, sheetUrl);
-                    } else {
-                      loadSheetData(sheetUrl, accessToken, val);
-                    }
-                  }}
-                  className="px-3 py-1.5 text-xs font-medium bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100"
-                >
-                  {metadata.sheets.map((tab) => (
-                    <option key={tab.sheetId} value={tab.title}>
-                      {tab.title} (gid: {tab.sheetId})
-                    </option>
-                  ))}
-                  <option value="__ALL__">Gabungkan Semua Tab</option>
-                </select>
-              </div>
-            )}
           </div>
 
           {selectedSheetTitle === '__ALL__' ? (

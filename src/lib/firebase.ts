@@ -1,42 +1,26 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, User } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-export const SHEETS_SCOPES = [
-  'https://www.googleapis.com/auth/spreadsheets.readonly',
-] as const;
+export interface PublicOperator {
+  uid: string;
+  displayName: string;
+  email?: string | null;
+}
+
+export const PUBLIC_OWNER_ID = 'public-shared';
+export const PUBLIC_PROJECT_ID = 'gd-ry-sinjai-public';
+
+export const PUBLIC_OPERATOR: PublicOperator = {
+  uid: PUBLIC_OWNER_ID,
+  displayName: 'Sistem Monitoring Gudang',
+};
 
 const app = initializeApp(firebaseConfig);
 
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
-for (const scope of SHEETS_SCOPES) {
-  googleProvider.addScope(scope);
-}
-
-// In-memory cache only for Google Workspace OAuth access token (never localStorage/sessionStorage)
-let cachedAccessToken: string | null = null;
-
-export function getGoogleAccessToken(): string | null {
-  return cachedAccessToken;
-}
-
-export function clearGoogleAccessToken(): void {
-  cachedAccessToken = null;
-}
-
-export async function signInWithGoogleWorkspace(): Promise<{
-  user: User;
-  accessToken: string | null;
-}> {
-  const result = await signInWithPopup(auth, googleProvider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  cachedAccessToken = credential?.accessToken ?? null;
-  return { user: result.user, accessToken: cachedAccessToken };
-}
 
 export enum OperationType {
   CREATE = 'create',
@@ -72,11 +56,11 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: auth.currentUser?.uid ?? PUBLIC_OWNER_ID,
+      email: auth.currentUser?.email ?? null,
+      emailVerified: auth.currentUser?.emailVerified ?? null,
+      isAnonymous: auth.currentUser?.isAnonymous ?? true,
+      tenantId: auth.currentUser?.tenantId ?? null,
       providerInfo:
         auth.currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,

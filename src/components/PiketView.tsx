@@ -27,8 +27,14 @@ export function PiketView() {
   const [search, setSearch] = useState('');
   const [selectedDay, setSelectedDay] = useState<number | 'all'>('all');
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadData = useCallback(async (silent = false) => {
+    if (silent) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const parsed = await fetchPiketSheetData(PIKET_CSV_URL);
@@ -39,11 +45,16 @@ export function PiketView() {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    loadData(false);
+    const interval = window.setInterval(() => {
+      loadData(true);
+    }, 10 * 60 * 1000);
+    return () => window.clearInterval(interval);
   }, [loadData]);
 
   const filteredRows = useMemo(() => {
@@ -137,6 +148,7 @@ export function PiketView() {
                   </span>
                 </>
               )}
+              {' · '}Auto-sinkron setiap 10 menit
             </p>
           </div>
 
@@ -163,12 +175,12 @@ export function PiketView() {
 
             <button
               type="button"
-              disabled={loading}
-              onClick={loadData}
+              disabled={loading || refreshing}
+              onClick={() => loadData(false)}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-cyan-700 hover:bg-cyan-800 rounded-xl transition-colors disabled:opacity-50 whitespace-nowrap"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Memuat...' : 'Muat Ulang Live'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${loading || refreshing ? 'animate-spin' : ''}`} />
+              <span>{loading || refreshing ? 'Memuat...' : 'Muat Ulang Live'}</span>
             </button>
           </div>
         </div>

@@ -1,4 +1,3 @@
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import {
   ArrowLeftRight,
@@ -12,18 +11,19 @@ import {
   Home,
   Layers,
   LayoutDashboard,
-  LogOut,
   Menu,
   Moon,
   Plus,
   RefreshCw,
   Settings2,
   Sun,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import { Component, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { AuthGate } from './components/AuthGate';
 import { InventoryView } from './components/InventoryView';
+import { KalebajengEmblem } from './components/KalebajengEmblem';
+import { KpiTargetView } from './components/KpiTargetView';
 import {
   DeleteConfirmModal,
   MaterialModal,
@@ -39,13 +39,11 @@ import { SheetsSyncView } from './components/SheetsSyncView';
 import { NotificationSeverityLabel } from './components/StatusText';
 import { WorkbookSheetsView } from './components/WorkbookSheetsView';
 import {
-  auth,
-  clearGoogleAccessToken,
   db,
-  getGoogleAccessToken,
   handleFirestoreError,
   OperationType,
-  signInWithGoogleWorkspace,
+  PUBLIC_OPERATOR,
+  PUBLIC_OWNER_ID,
   testFirestoreConnection,
 } from './lib/firebase';
 import {
@@ -83,6 +81,7 @@ type ActiveTab =
   | 'inventory'
   | 'piket'
   | 'workbook'
+  | 'kpi'
   | 'movements'
   | 'notifications'
   | 'sheets';
@@ -134,13 +133,6 @@ class AppErrorBoundary extends Component<
 }
 
 function DashboardApp() {
-  const [user, setUser] = useState<User | null>(null);
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(() =>
-    getGoogleAccessToken()
-  );
-  const [authReady, setAuthReady] = useState(false);
-  const [signingIn, setSigningIn] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
   const [offlineBanner, setOfflineBanner] = useState<string | null>(null);
   const [rebuildingCsv, setRebuildingCsv] = useState(false);
   const [rebuildingBanner, setRebuildingBanner] = useState<string | null>(null);
@@ -220,33 +212,11 @@ function DashboardApp() {
     });
   }, []);
 
+  // Listen to shared public workspace projects
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setAuthReady(true);
-      if (!firebaseUser) {
-        clearGoogleAccessToken();
-        setGoogleAccessToken(null);
-        setProjects([]);
-        setActiveProjectId(null);
-        setMaterials([]);
-        setMovements([]);
-        setNotifications([]);
-        seededRef.current = false;
-        migratedProjectsRef.current = new Set();
-      } else {
-        setGoogleAccessToken(getGoogleAccessToken());
-      }
-    });
-    return unsub;
-  }, []);
-
-  // Listen to user's projects once authenticated
-  useEffect(() => {
-    if (!authReady || !user) return;
     setProjectsLoading(true);
     const path = 'projects';
-    const q = query(collection(db, path), where('ownerId', '==', user.uid));
+    const q = query(collection(db, path), where('ownerId', '==', PUBLIC_OWNER_ID));
 
     const unsub = onSnapshot(
       q,
@@ -265,7 +235,7 @@ function DashboardApp() {
           seededRef.current = true;
           try {
             setRebuildingBanner('Menarik 1.827 baris material awal dari Spreadsheet CSV Gd Ry Sinjai...');
-            const newId = await seedStarterProject(user);
+            const newId = await seedStarterProject(PUBLIC_OPERATOR);
             setActiveProjectId(newId);
           } catch (err) {
             console.error(err);
@@ -289,7 +259,7 @@ function DashboardApp() {
     );
 
     return unsub;
-  }, [authReady, user]);
+  }, []);
 
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) || null,
@@ -298,7 +268,7 @@ function DashboardApp() {
 
   // Listen to materials, movements, notifications for activeProjectId
   useEffect(() => {
-    if (!authReady || !user || !activeProject) {
+    if (!activeProject) {
       setMaterials([]);
       setMovements([]);
       setNotifications([]);
@@ -337,7 +307,7 @@ function DashboardApp() {
           setRebuildingBanner(
             'Menghapus data lama dan membangun ulang database sesuai Spreadsheet CSV Gd Ry Sinjai...'
           );
-          rebuildProjectFromLivePublishedCsv(user, activeProject.id)
+          rebuildProjectFromLivePublishedCsv(PUBLIC_OPERATOR, activeProject.id)
             .catch((err) => {
               console.error('Gagal migrasi data dari CSV:', err);
             })
@@ -441,44 +411,13 @@ function DashboardApp() {
       unsubMov();
       unsubNtf();
     };
-  }, [authReady, user, activeProject]);
+  }, [activeProject]);
 
   useEffect(() => {
     if (!liveToast) return;
     const timer = window.setTimeout(() => setLiveToast(null), 7000);
     return () => window.clearTimeout(timer);
   }, [liveToast]);
-
-  async function handleSignIn() {
-    setSigningIn(true);
-    setAuthError(null);
-    try {
-      const result = await signInWithGoogleWorkspace();
-      setGoogleAccessToken(result.accessToken);
-      if (!result.user.emailVerified) {
-        setAuthError('Email akun Google Anda belum terverifikasi.');
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Gagal masuk dengan Google.';
-      if (!msg.includes('popup-closed-by-user')) {
-        setAuthError('Autentikasi gagal. Pastikan popup tidak diblokir browser Anda.');
-      }
-    } finally {
-      setSigningIn(false);
-    }
-  }
-
-  async function handleReconnectGoogleSheets(): Promise<string | null> {
-    const result = await signInWithGoogleWorkspace();
-    setGoogleAccessToken(result.accessToken);
-    return result.accessToken;
-  }
-
-  async function handleSignOut() {
-    clearGoogleAccessToken();
-    setGoogleAccessToken(null);
-    await signOut(auth);
-  }
 
   async function handleRequestBrowserPermission() {
     if (typeof window === 'undefined' || !('Notification' in window)) return;
@@ -491,37 +430,17 @@ function DashboardApp() {
   }
 
   async function handleRebuildFromLiveCsv() {
-    if (!user || !activeProject) return;
+    if (!activeProject) return;
     setRebuildingCsv(true);
     setRebuildingBanner(
       'Menghapus data lama dan membangun ulang data terbaru dari Spreadsheet CSV Gd Ry Sinjai...'
     );
     try {
-      await rebuildProjectFromLivePublishedCsv(user, activeProject.id);
+      await rebuildProjectFromLivePublishedCsv(PUBLIC_OPERATOR, activeProject.id);
     } finally {
       setRebuildingCsv(false);
       setRebuildingBanner(null);
     }
-  }
-
-  if (!authReady) {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
-        <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-          Menghubungkan layanan database...
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <AuthGate
-        onSignIn={handleSignIn}
-        signingIn={signingIn}
-        error={authError}
-      />
-    );
   }
 
   const unreadNotifCount = notifications.filter((n) => !n.isRead).length;
@@ -537,6 +456,7 @@ function DashboardApp() {
     inventory: 'Tabel Stok Gudang',
     piket: 'Jadwal Piket (gid: 418796009)',
     workbook: 'Workbook Terlampir (10 Sheet)',
+    kpi: 'KPI Pelanggan, MVA & BP',
     movements: 'Log Mutasi Barang',
     notifications: 'Pusat Notifikasi',
     sheets: 'Sumber Spreadsheet CSV',
@@ -553,6 +473,7 @@ function DashboardApp() {
     { id: 'inventory', label: 'Tabel Stok Gudang', icon: Box },
     { id: 'piket', label: 'Jadwal Piket (418796009)', icon: CalendarCheck2 },
     { id: 'workbook', label: 'Rekap Workbook (10 Sheet)', icon: Layers },
+    { id: 'kpi', label: 'KPI Pelanggan & MVA', icon: TrendingUp },
     { id: 'movements', label: 'Log Mutasi Barang', icon: ArrowLeftRight },
     {
       id: 'notifications',
@@ -563,7 +484,7 @@ function DashboardApp() {
     { id: 'sheets', label: 'Sumber Spreadsheet', icon: FileSpreadsheet },
   ];
 
-  const userInitial = (user.displayName || user.email || 'U').charAt(0).toUpperCase();
+  const operatorInitial = PUBLIC_OPERATOR.displayName.charAt(0).toUpperCase();
 
   return (
     <>
@@ -593,7 +514,6 @@ function DashboardApp() {
               setActiveTab('inventory');
             }
           }}
-          onSignOut={handleSignOut}
         />
       ) : (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
@@ -623,9 +543,7 @@ function DashboardApp() {
                 }`}
                 title="Kembali ke Portal Utama"
               >
-                <span className="w-7 h-7 rounded-lg bg-cyan-700 text-white flex items-center justify-center shrink-0">
-                  <Box className="w-4 h-4" />
-                </span>
+                <KalebajengEmblem size="sm" />
                 <span className="text-base font-bold tracking-tight font-display text-slate-900 dark:text-slate-100 whitespace-nowrap truncate">
                   BinaLogistik
                 </span>
@@ -780,37 +698,18 @@ function DashboardApp() {
                 }`}
               >
                 <div className={`flex items-center gap-2.5 min-w-0 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
-                  {user.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.displayName || 'Pengguna'}
-                      referrerPolicy="no-referrer"
-                      className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200 shrink-0">
-                      {userInitial}
-                    </div>
-                  )}
+                  <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-950 flex items-center justify-center text-xs font-semibold text-cyan-800 dark:text-cyan-300 shrink-0">
+                    {operatorInitial}
+                  </div>
                   <div className="min-w-0">
                     <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {user.displayName || 'Admin Gudang'}
+                      {PUBLIC_OPERATOR.displayName}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                      {user.email}
+                      Workspace Publik · Live DB
                     </p>
                   </div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  title="Keluar"
-                  aria-label="Keluar dari akun"
-                  className="p-1.5 text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0"
-                >
-                  <LogOut className="w-4 h-4" />
-                </button>
               </div>
             </div>
           </aside>
@@ -934,6 +833,8 @@ function DashboardApp() {
 
               {activeTab === 'workbook' && <WorkbookSheetsView />}
 
+              {activeTab === 'kpi' && <KpiTargetView />}
+
               {activeTab === 'movements' && (
                 <MovementsView
                   movements={movements}
@@ -974,8 +875,6 @@ function DashboardApp() {
 
               {activeTab === 'sheets' && (
                 <SheetsSyncView
-                  accessToken={googleAccessToken}
-                  onReconnectGoogle={handleReconnectGoogleSheets}
                   activeProjectName={activeProject?.name || 'Gudang Aktif'}
                   isCompleted={Boolean(isCompleted)}
                   existingMaterials={materials}
@@ -984,7 +883,7 @@ function DashboardApp() {
                       throw new Error('Pilih gudang aktif terlebih dahulu.');
                     }
                     return syncMaterialsFromSheet(
-                      user,
+                      PUBLIC_OPERATOR,
                       activeProject.id,
                       items,
                       materials,
@@ -997,7 +896,7 @@ function DashboardApp() {
                       throw new Error('Pilih gudang aktif terlebih dahulu.');
                     }
                     return rebuildProjectFromSheetItems(
-                      user,
+                      PUBLIC_OPERATOR,
                       activeProject.id,
                       items,
                       sheetLabel,
@@ -1009,7 +908,7 @@ function DashboardApp() {
                   }}
                   onCreateProjectFromSheet={async (projectName, sheetLabel, items) => {
                     const created = await createProjectFromSheet(
-                      user,
+                      PUBLIC_OPERATOR,
                       projectName,
                       sheetLabel,
                       items
@@ -1069,11 +968,11 @@ function DashboardApp() {
           materials={materials}
           initialMaterial={movementModalState.material}
           initialType={movementModalState.type}
-          defaultActorName={user.displayName || user.email || 'Admin Gudang'}
+          defaultActorName={PUBLIC_OPERATOR.displayName}
           onClose={() => setMovementModalState({ open: false })}
           onSubmit={async (mat, input: StockMovementInput) => {
             await recordStockMovement(
-              user,
+              PUBLIC_OPERATOR,
               activeProject.id,
               mat,
               input,
@@ -1091,7 +990,7 @@ function DashboardApp() {
           onSubmit={async (input: MaterialFormInput) => {
             if (materialModalState.editing) {
               await updateMaterialConfig(
-                user,
+                PUBLIC_OPERATOR,
                 activeProject.id,
                 materialModalState.editing,
                 {
@@ -1109,7 +1008,11 @@ function DashboardApp() {
                 }
               );
             } else {
-              await createMaterialWithInitialStock(user, activeProject.id, input);
+              await createMaterialWithInitialStock(
+                PUBLIC_OPERATOR,
+                activeProject.id,
+                input
+              );
             }
           }}
         />
@@ -1117,12 +1020,12 @@ function DashboardApp() {
 
       {projectModalState.open && (
         <ProjectModal
-          defaultManager={user.displayName || 'Admin Gudang'}
+          defaultManager="Admin Gudang"
           activeProject={activeProject}
           mode={projectModalState.mode}
           onClose={() => setProjectModalState({ open: false, mode: 'create' })}
           onCreateProject={async (input) => {
-            const newId = await createProject(user, input);
+            const newId = await createProject(PUBLIC_OPERATOR, input);
             setActiveProjectId(newId);
           }}
           onUpdateStatus={async (status: ProjectStatus) => {

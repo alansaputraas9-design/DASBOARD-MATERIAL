@@ -61,9 +61,15 @@ export function WorkbookSheetsView() {
     [selectedGid]
   );
 
+const CACHE_TTL_MS = 10 * 60 * 1000;
+
   const loadSingleSheet = useCallback(
     async (meta: WorkbookSheetMeta, forceReload = false) => {
-      if (!forceReload && cache[meta.gid]) return;
+      const existing = cache[meta.gid];
+      const isFresh =
+        existing &&
+        Date.now() - existing.fetchedAt.getTime() < CACHE_TTL_MS;
+      if (!forceReload && isFresh) return;
 
       setLoadingGids((prev) => ({ ...prev, [meta.gid]: true }));
       setErrors((prev) => {
@@ -90,6 +96,13 @@ export function WorkbookSheetsView() {
 
   useEffect(() => {
     loadSingleSheet(activeMeta, false);
+  }, [activeMeta, loadSingleSheet]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadSingleSheet(activeMeta, true);
+    }, CACHE_TTL_MS);
+    return () => window.clearInterval(timer);
   }, [activeMeta, loadSingleSheet]);
 
   const handleLoadAllSheets = useCallback(async () => {
@@ -458,6 +471,7 @@ export function WorkbookSheetsView() {
                     </span>
                   </>
                 )}
+                {' · '}Auto-sinkron tiap 10 menit
               </p>
             </div>
 

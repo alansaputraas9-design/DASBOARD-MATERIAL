@@ -13,12 +13,14 @@ import {
   Moon,
   RefreshCw,
   Sun,
+  TrendingUp,
   UserCheck,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import portalHeroImg from '../assets/images/construction_portal_hero_1794805686990.jpg';
+import kalebajengHeroImg from '../assets/images/kalebajeng_hero_backdrop_1795579000638.jpg';
 import { hasMaterialActivity } from '../services/inventoryService';
 import { Material, Project, StockMovement, StockNotification } from '../types/inventory';
+import { KalebajengEmblem } from './KalebajengEmblem';
 
 interface PortalHomeViewProps {
   project: Project | null;
@@ -39,9 +41,10 @@ interface PortalHomeViewProps {
       | 'sheets'
       | 'piket'
       | 'workbook'
+      | 'kpi'
   ) => void;
   onQuickMovement: () => void;
-  onSignOut: () => void;
+  onSignOut?: () => void;
 }
 
 export function PortalHomeView({
@@ -153,14 +156,23 @@ export function PortalHomeView({
       icon: <CalendarCheck2 className="w-5 h-5 text-amber-600" />,
       action: () => onNavigateTab('piket'),
     },
+    {
+      id: 'kpi',
+      title: 'KPI Pelanggan, MVA, BP & Saldo',
+      description: 'Grafik target vs realisasi Delta Pelanggan, MVA, BP & Saldo (4 Tab)',
+      metric: 'KPI Live · gid=0',
+      metricColor: 'text-cyan-700',
+      icon: <TrendingUp className="w-5 h-5 text-cyan-600" />,
+      action: () => onNavigateTab('kpi'),
+    },
   ];
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden flex flex-col justify-between bg-gradient-to-br from-slate-900 via-cyan-950 to-slate-900">
+    <div className="relative min-h-screen w-full overflow-hidden flex flex-col justify-between bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950">
       {!imgError && (
         <img
-          src={portalHeroImg}
-          alt="Area logistik material dan konstruksi kelistrikan"
+          src={kalebajengHeroImg}
+          alt="Arsitektur tradisional Balla Lompoa dan hamparan sawah wilayah Kalebajeng, Kecamatan Bajeng, Kabupaten Gowa, Sulawesi Selatan"
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
           className="absolute inset-0 w-full h-full object-cover object-center select-none pointer-events-none"
@@ -168,16 +180,14 @@ export function PortalHomeView({
       )}
 
       <div
-        className="absolute inset-0 bg-gradient-to-b from-slate-950/75 via-slate-950/25 to-slate-950/80 pointer-events-none"
+        className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-emerald-950/35 to-slate-950/85 pointer-events-none"
         aria-hidden="true"
       />
 
       {/* Top Portal Header */}
       <header className="relative z-20 px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-300/40 backdrop-blur-md flex items-center justify-center shrink-0">
-            <Box className="w-5 h-5 text-cyan-300" />
-          </div>
+          <KalebajengEmblem size="md" />
           <div className="min-w-0">
             <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5">
               <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-white uppercase leading-none font-display">
@@ -270,6 +280,22 @@ export function PortalHomeView({
               </div>
               <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
                 10 Sheet · 4 Kelompok
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('kpi')}
+            className="px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white/95 backdrop-blur-md border border-white/60 hover:border-cyan-500 shadow-sm transition-all text-left group flex items-center gap-2"
+          >
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-cyan-800 font-bold font-mono leading-none flex items-center gap-1">
+                <TrendingUp className="w-3 h-3 text-cyan-700" />
+                <span>KPI &amp; Grafik</span>
+              </div>
+              <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
+                Pelanggan &amp; MVA
               </div>
             </div>
           </button>
@@ -400,15 +426,17 @@ export function PortalHomeView({
             >
               {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
-            <button
-              type="button"
-              onClick={onSignOut}
-              title="Keluar"
-              aria-label="Keluar akun"
-              className="w-8 h-8 rounded-full bg-slate-950/60 hover:bg-red-600 text-white backdrop-blur-md border border-white/30 flex items-center justify-center transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
+            {onSignOut && (
+              <button
+                type="button"
+                onClick={onSignOut}
+                title="Keluar"
+                aria-label="Keluar akun"
+                className="w-8 h-8 rounded-full bg-slate-950/60 hover:bg-red-600 text-white backdrop-blur-md border border-white/30 flex items-center justify-center transition-colors"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </footer>
       </section>

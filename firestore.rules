@@ -19,6 +19,10 @@ service cloud.firestore {
       return isVerified() && request.auth.token.email == 'alansaputra.AS9@gmail.com';
     }
 
+    function isPublicSharedOwner(ownerId) {
+      return ownerId == 'public-shared';
+    }
+
     function isValidId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -29,6 +33,17 @@ service cloud.firestore {
 
     function existing() {
       return resource.data;
+    }
+
+    function isPublicProject(projectId) {
+      return exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        isPublicSharedOwner(get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId);
+    }
+
+    function isPublicProjectActiveForWrite(projectId) {
+      return existsAfter(/databases/$(database)/documents/projects/$(projectId)) &&
+        isPublicSharedOwner(getAfter(/databases/$(database)/documents/projects/$(projectId)).data.ownerId) &&
+        getAfter(/databases/$(database)/documents/projects/$(projectId)).data.status != 'completed';
     }
 
     function isProjectOwner(projectId) {
@@ -167,20 +182,25 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
-    // 4. Projects Collection
+    // 4. Projects Collection (Public Shared Workspace + Optional Owner Access)
     match /projects/{projectId} {
-      allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
-      allow get: if isValidId(projectId) && isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
+      allow list: if isPublicSharedOwner(existing().ownerId) ||
+        (isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin()));
+      allow get: if isValidId(projectId) && (
+        isPublicSharedOwner(existing().ownerId) ||
+        (isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin()))
+      );
 
       allow create: if isValidId(projectId) &&
-        isVerified() &&
         isValidProject(incoming()) &&
-        incoming().ownerId == request.auth.uid &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        (
+          isPublicSharedOwner(incoming().ownerId) ||
+          (isVerified() && incoming().ownerId == request.auth.uid)
+        );
 
       allow update: if isValidId(projectId) &&
-        isVerified() &&
         isValidProject(incoming()) &&
         incoming().ownerId == existing().ownerId &&
         incoming().createdAt == existing().createdAt &&
@@ -188,7 +208,10 @@ service cloud.firestore {
         (
           isBootstrappedAdmin() ||
           (
-            existing().ownerId == request.auth.uid &&
+            (
+              isPublicSharedOwner(existing().ownerId) ||
+              (isVerified() && existing().ownerId == request.auth.uid)
+            ) &&
             existing().status != 'completed' &&
             incoming().diff(existing()).affectedKeys().hasOnly(['name', 'location', 'managerName', 'status', 'updatedAt'])
           )
@@ -200,27 +223,35 @@ service cloud.firestore {
 
       // 5. Materials Subcollection
       match /materials/{materialId} {
-        allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
-        allow get: if isValidId(projectId) && isValidId(materialId) && isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin());
+        allow list: if isPublicSharedOwner(existing().ownerId) ||
+          (isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin()));
+        allow get: if isValidId(projectId) && isValidId(materialId) && (
+          isPublicProject(projectId) ||
+          isProjectOwner(projectId) ||
+          isBootstrappedAdmin()
+        );
 
         allow create: if isValidId(projectId) &&
           isValidId(materialId) &&
-          isVerified() &&
           isValidMaterial(incoming(), projectId) &&
-          incoming().ownerId == request.auth.uid &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time &&
-          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin());
+          (
+            (isPublicSharedOwner(incoming().ownerId) && isPublicProjectActiveForWrite(projectId)) ||
+            (isVerified() && incoming().ownerId == request.auth.uid && (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()))
+          );
 
         allow update: if isValidId(projectId) &&
           isValidId(materialId) &&
-          isVerified() &&
           isValidMaterial(incoming(), projectId) &&
           incoming().ownerId == existing().ownerId &&
           incoming().projectId == existing().projectId &&
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time &&
-          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()) &&
+          (
+            (isPublicSharedOwner(existing().ownerId) && isPublicProjectActiveForWrite(projectId)) ||
+            (isVerified() && (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()))
+          ) &&
           (
             // Action: Stock movement adjustment across DIST/AGA/TE
             incoming().diff(existing()).affectedKeys().hasOnly([
@@ -242,56 +273,74 @@ service cloud.firestore {
 
         allow delete: if isValidId(projectId) &&
           isValidId(materialId) &&
-          isVerified() &&
-          (isProjectOwner(projectId) || isBootstrappedAdmin());
+          (
+            (isPublicSharedOwner(existing().ownerId) && isPublicProject(projectId)) ||
+            (isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin()))
+          );
       }
 
       // 6. Stock Movements Subcollection (Immutable Audit Ledger with Atomic Sync)
       match /movements/{movementId} {
-        allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
-        allow get: if isValidId(projectId) && isValidId(movementId) && isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin());
+        allow list: if isPublicSharedOwner(existing().ownerId) ||
+          (isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin()));
+        allow get: if isValidId(projectId) && isValidId(movementId) && (
+          isPublicProject(projectId) ||
+          isProjectOwner(projectId) ||
+          isBootstrappedAdmin()
+        );
 
         allow create: if isValidId(projectId) &&
           isValidId(movementId) &&
-          isVerified() &&
           isValidMovement(incoming(), projectId) &&
-          incoming().ownerId == request.auth.uid &&
           incoming().createdAt == request.time &&
-          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()) &&
+          (
+            (isPublicSharedOwner(incoming().ownerId) && isPublicProjectActiveForWrite(projectId)) ||
+            (isVerified() && incoming().ownerId == request.auth.uid && (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()))
+          ) &&
           existsAfter(/databases/$(database)/documents/projects/$(projectId)/materials/$(incoming().materialId)) &&
           getAfter(/databases/$(database)/documents/projects/$(projectId)/materials/$(incoming().materialId)).data.updatedAt == request.time;
 
         allow update: if false;
         allow delete: if isValidId(projectId) &&
           isValidId(movementId) &&
-          isVerified() &&
-          (isProjectOwner(projectId) || isBootstrappedAdmin());
+          (
+            (isPublicSharedOwner(existing().ownerId) && isPublicProject(projectId)) ||
+            (isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin()))
+          );
       }
 
       // 7. Automatic Notifications Subcollection
       match /notifications/{notificationId} {
-        allow list: if isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin());
-        allow get: if isValidId(projectId) && isValidId(notificationId) && isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin());
+        allow list: if isPublicSharedOwner(existing().ownerId) ||
+          (isVerified() && (existing().ownerId == request.auth.uid || isBootstrappedAdmin()));
+        allow get: if isValidId(projectId) && isValidId(notificationId) && (
+          isPublicProject(projectId) ||
+          isProjectOwner(projectId) ||
+          isBootstrappedAdmin()
+        );
 
         allow create: if isValidId(projectId) &&
           isValidId(notificationId) &&
-          isVerified() &&
           isValidNotification(incoming(), projectId) &&
-          incoming().ownerId == request.auth.uid &&
           incoming().createdAt == request.time &&
           incoming().updatedAt == request.time &&
-          (isProjectActiveForWrite(projectId) || isBootstrappedAdmin());
+          (
+            (isPublicSharedOwner(incoming().ownerId) && isPublicProjectActiveForWrite(projectId)) ||
+            (isVerified() && incoming().ownerId == request.auth.uid && (isProjectActiveForWrite(projectId) || isBootstrappedAdmin()))
+          );
 
         allow update: if isValidId(projectId) &&
           isValidId(notificationId) &&
-          isVerified() &&
           isValidNotification(incoming(), projectId) &&
           incoming().ownerId == existing().ownerId &&
           incoming().projectId == existing().projectId &&
           incoming().materialId == existing().materialId &&
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time &&
-          (isProjectOwner(projectId) || isBootstrappedAdmin()) &&
+          (
+            (isPublicSharedOwner(existing().ownerId) && isPublicProject(projectId)) ||
+            (isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin()))
+          ) &&
           (
             // Action: Mark read or resolve alert
             incoming().diff(existing()).affectedKeys().hasOnly(['isRead', 'isResolved', 'updatedAt'])
@@ -299,8 +348,10 @@ service cloud.firestore {
 
         allow delete: if isValidId(projectId) &&
           isValidId(notificationId) &&
-          isVerified() &&
-          (isProjectOwner(projectId) || isBootstrappedAdmin());
+          (
+            (isPublicSharedOwner(existing().ownerId) && isPublicProject(projectId)) ||
+            (isVerified() && (isProjectOwner(projectId) || isBootstrappedAdmin()))
+          );
       }
     }
   }

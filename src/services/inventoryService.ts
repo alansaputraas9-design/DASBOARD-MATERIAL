@@ -1,8 +1,8 @@
-import type { User } from 'firebase/auth';
 import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -11,7 +11,13 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  db,
+  handleFirestoreError,
+  OperationType,
+  PUBLIC_PROJECT_ID,
+  PublicOperator,
+} from '../lib/firebase';
 import {
   DivisionBreakdown,
   FIELD_LIMITS,
@@ -87,13 +93,18 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+export const AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+
 export interface CreateProjectInput {
   name: string;
   location: string;
   managerName: string;
 }
 
-export async function createProject(user: User, input: CreateProjectInput): Promise<string> {
+export async function createProject(
+  operator: PublicOperator,
+  input: CreateProjectInput
+): Promise<string> {
   const projectId = generateDocId('proj');
   const path = `projects/${projectId}`;
   try {
@@ -102,7 +113,7 @@ export async function createProject(user: User, input: CreateProjectInput): Prom
       location: clampString(input.location, FIELD_LIMITS.locationMax),
       managerName: clampString(input.managerName, FIELD_LIMITS.managerNameMax),
       status: 'active' as ProjectStatus,
-      ownerId: user.uid,
+      ownerId: operator.uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -148,7 +159,7 @@ export interface MaterialFormInput {
 }
 
 export async function createMaterialWithInitialStock(
-  user: User,
+  operator: PublicOperator,
   projectId: string,
   input: MaterialFormInput
 ): Promise<void> {
@@ -189,7 +200,7 @@ export async function createMaterialWithInitialStock(
 
   batch.set(matRef, {
     projectId,
-    ownerId: user.uid,
+    ownerId: operator.uid,
     rowNumber: clampNumber(Math.round(input.rowNumber || 1), 0, 1000000),
     sku: cleanSku,
     name: cleanName,
@@ -216,7 +227,7 @@ export async function createMaterialWithInitialStock(
     const movRef = doc(db, 'projects', projectId, 'movements', generateDocId('mov'));
     batch.set(movRef, {
       projectId,
-      ownerId: user.uid,
+      ownerId: operator.uid,
       materialId,
       materialName: cleanName,
       materialSku: cleanSku,
@@ -230,7 +241,7 @@ export async function createMaterialWithInitialStock(
       newStock: cleanStock,
       referenceNo: `INIT-${cleanSku}`.slice(0, FIELD_LIMITS.referenceMax),
       actorName: clampString(
-        user.displayName || user.email || 'Admin Gudang',
+        operator.displayName || operator.email || 'Petugas Gudang',
         FIELD_LIMITS.actorMax
       ),
       notes: 'Pencatatan saldo awal material ke database.',
@@ -241,7 +252,7 @@ export async function createMaterialWithInitialStock(
   if (status !== 'nominal' && (cleanMin > 0 || cleanStock > 0)) {
     const notif = buildAlertPayload(
       projectId,
-      user.uid,
+      operator.uid,
       materialId,
       cleanName,
       cleanSku,
@@ -268,7 +279,7 @@ export async function createMaterialWithInitialStock(
 }
 
 export async function updateMaterialConfig(
-  user: User,
+  operator: PublicOperator,
   projectId: string,
   material: Material,
   input: Pick<
@@ -329,7 +340,7 @@ export async function updateMaterialConfig(
       notifRef,
       buildAlertPayload(
         projectId,
-        user.uid,
+        operator.uid,
         material.id,
         cleanName,
         material.sku,
@@ -373,7 +384,7 @@ export interface StockMovementInput {
 }
 
 export async function recordStockMovement(
-  user: User,
+  operator: PublicOperator,
   projectId: string,
   material: Material,
   input: StockMovementInput,
@@ -441,7 +452,7 @@ export async function recordStockMovement(
 
   batch.set(movRef, {
     projectId,
-    ownerId: user.uid,
+    ownerId: operator.uid,
     materialId: material.id,
     materialName: material.name,
     materialSku: material.sku,
@@ -473,7 +484,7 @@ export async function recordStockMovement(
         notifRef,
         buildAlertPayload(
           projectId,
-          user.uid,
+          operator.uid,
           material.id,
           material.name,
           material.sku,
@@ -509,7 +520,7 @@ export async function recordStockMovement(
     );
     batch.set(restockNotifRef, {
       projectId,
-      ownerId: user.uid,
+      ownerId: operator.uid,
       materialId: material.id,
       materialName: material.name,
       materialSku: material.sku,
@@ -682,15 +693,15 @@ export interface SheetSyncResult {
 }
 
 export async function rebuildProjectFromSheetItems(
-  user: User,
+  operator: PublicOperator,
   projectId: string,
   items: MaterialFormInput[],
   sheetLabel: string,
   updateProjectHeader?: { name: string; location: string }
 ): Promise<SheetSyncResult> {
-  const deletedMaterials = await deleteCollectionInBatches(user.uid, projectId, 'materials');
-  await deleteCollectionInBatches(user.uid, projectId, 'movements');
-  await deleteCollectionInBatches(user.uid, projectId, 'notifications');
+  const deletedMaterials = await deleteCollectionInBatches(operator.uid, projectId, 'materials');
+  await deleteCollectionInBatches(operator.uid, projectId, 'movements');
+  await deleteCollectionInBatches(operator.uid, projectId, 'notifications');
 
   if (updateProjectHeader) {
     try {
@@ -748,14 +759,14 @@ export async function rebuildProjectFromSheetItems(
       const cleanNotes = clampString(rawItem.notes || '', FIELD_LIMITS.notesMax);
 
       const status = computeMaterialStatus(cleanStock, cleanMin, cleanCrit);
-      const materialId = `mat-s-${String(rawItem.rowNumber).padStart(4, '0')}-${Math.random()
-        .toString(36)
-        .slice(2, 6)}`;
+      const materialId = `mat-csv-${String(rawItem.rowNumber).padStart(4, '0')}-${cleanSku
+        .toLowerCase()
+        .slice(0, 14)}`;
       const matRef = doc(db, 'projects', projectId, 'materials', materialId);
 
       batch.set(matRef, {
         projectId,
-        ownerId: user.uid,
+        ownerId: operator.uid,
         rowNumber: clampNumber(Math.round(rawItem.rowNumber), 0, 1000000),
         sku: cleanSku,
         name: cleanName,
@@ -787,10 +798,16 @@ export async function rebuildProjectFromSheetItems(
             : cleanMasuk.aga >= cleanMasuk.te
             ? 'AGA'
             : 'TE';
-        const movRef = doc(db, 'projects', projectId, 'movements', generateDocId('mov'));
+        const movRef = doc(
+          db,
+          'projects',
+          projectId,
+          'movements',
+          `mov-in-${String(rawItem.rowNumber).padStart(4, '0')}`
+        );
         batch.set(movRef, {
           projectId,
-          ownerId: user.uid,
+          ownerId: operator.uid,
           materialId,
           materialName: cleanName,
           materialSku: cleanSku,
@@ -819,10 +836,16 @@ export async function rebuildProjectFromSheetItems(
             : cleanKeluar.aga >= cleanKeluar.te
             ? 'AGA'
             : 'TE';
-        const movRef = doc(db, 'projects', projectId, 'movements', generateDocId('mov'));
+        const movRef = doc(
+          db,
+          'projects',
+          projectId,
+          'movements',
+          `mov-out-${String(rawItem.rowNumber).padStart(4, '0')}`
+        );
         batch.set(movRef, {
           projectId,
-          ownerId: user.uid,
+          ownerId: operator.uid,
           materialId,
           materialName: cleanName,
           materialSku: cleanSku,
@@ -852,13 +875,13 @@ export async function rebuildProjectFromSheetItems(
           'projects',
           projectId,
           'notifications',
-          generateDocId('ntf')
+          `ntf-csv-${String(rawItem.rowNumber).padStart(4, '0')}`
         );
         batch.set(
           notifRef,
           buildAlertPayload(
             projectId,
-            user.uid,
+            operator.uid,
             materialId,
             cleanName,
             cleanSku,
@@ -890,31 +913,53 @@ export async function rebuildProjectFromSheetItems(
 }
 
 export async function rebuildProjectFromLivePublishedCsv(
-  user: User,
+  operator: PublicOperator,
   projectId: string
 ): Promise<SheetSyncResult> {
   const items = await fetchMaterialsFromPublishedCsv(PUBLISHED_SHEET_CSV_URL);
-  return rebuildProjectFromSheetItems(user, projectId, items, 'Spreadsheet CSV Gd Ry Sinjai', {
+  return rebuildProjectFromSheetItems(operator, projectId, items, 'Spreadsheet CSV Gd Ry Sinjai', {
     name: 'Gd Ry Sinjai — Monitoring Material',
     location: 'Sinjai, Sulawesi Selatan',
   });
 }
 
-export async function seedStarterProject(user: User): Promise<string> {
-  const projectId = await createProject(user, {
-    name: 'Gd Ry Sinjai — Monitoring Material',
-    location: 'Sinjai, Sulawesi Selatan',
-    managerName: clampString(user.displayName || 'Admin Logistik', FIELD_LIMITS.managerNameMax),
-  });
+export async function seedStarterProject(operator: PublicOperator): Promise<string> {
+  const projectRef = doc(db, 'projects', PUBLIC_PROJECT_ID);
+  try {
+    const existingSnap = await getDoc(projectRef);
+    if (existingSnap.exists()) {
+      return PUBLIC_PROJECT_ID;
+    }
+
+    await setDoc(projectRef, {
+      name: 'Gd Ry Sinjai — Monitoring Material',
+      location: 'Sinjai, Sulawesi Selatan',
+      managerName: clampString(
+        operator.displayName || 'Petugas Gudang Sinjai',
+        FIELD_LIMITS.managerNameMax
+      ),
+      status: 'active' as ProjectStatus,
+      ownerId: operator.uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `projects/${PUBLIC_PROJECT_ID}`);
+  }
 
   try {
     const items = await fetchMaterialsFromPublishedCsv(PUBLISHED_SHEET_CSV_URL);
-    await rebuildProjectFromSheetItems(user, projectId, items, 'Spreadsheet CSV Gd Ry Sinjai');
+    await rebuildProjectFromSheetItems(
+      operator,
+      PUBLIC_PROJECT_ID,
+      items,
+      'Spreadsheet CSV Gd Ry Sinjai'
+    );
   } catch (err) {
     console.error('Gagal mengunduh CSV awal:', err);
   }
 
-  return projectId;
+  return PUBLIC_PROJECT_ID;
 }
 
 export function formatIDR(amount: number): string {
@@ -1017,18 +1062,29 @@ export function exportMaterialsToCSV(projectName: string, materials: Material[])
   URL.revokeObjectURL(url);
 }
 
+function breakdownEquals(a?: DivisionBreakdown, b?: DivisionBreakdown): boolean {
+  return (
+    (a?.dist ?? 0) === (b?.dist ?? 0) &&
+    (a?.aga ?? 0) === (b?.aga ?? 0) &&
+    (a?.te ?? 0) === (b?.te ?? 0) &&
+    (a?.total ?? 0) === (b?.total ?? 0)
+  );
+}
+
 export async function syncMaterialsFromSheet(
-  user: User,
+  operator: PublicOperator,
   projectId: string,
   parsedMaterials: MaterialFormInput[],
   existingMaterials: Material[],
   openNotifications: StockNotification[],
-  sheetLabel: string
+  sheetLabel: string,
+  options?: { onlyChanged?: boolean }
 ): Promise<SheetSyncResult> {
   if (parsedMaterials.length === 0) {
     return { createdCount: 0, updatedCount: 0, notificationsTriggered: 0 };
   }
 
+  const onlyChanged = options?.onlyChanged ?? false;
   const bySku = new Map<string, Material>();
   const byName = new Map<string, Material>();
   for (const m of existingMaterials) {
@@ -1036,58 +1092,161 @@ export async function syncMaterialsFromSheet(
     byName.set(m.name.trim().toLowerCase(), m);
   }
 
+  const pendingOps: Array<{
+    mode: 'create' | 'update';
+    matched?: Material;
+    rawItem: MaterialFormInput;
+    cleanAkhir: DivisionBreakdown;
+    cleanAwal: DivisionBreakdown;
+    cleanMasuk: DivisionBreakdown;
+    cleanKeluar: DivisionBreakdown;
+    cleanStock: number;
+    cleanMin: number;
+    cleanCrit: number;
+    cleanCap: number;
+    cleanPrice: number;
+    cleanSku: string;
+    cleanName: string;
+    cleanUnit: string;
+    cleanSupplier: string;
+    cleanZone: string;
+    cleanNotes: string;
+    newStatus: MaterialStatus;
+    active: boolean;
+  }> = [];
+
+  for (const rawItem of parsedMaterials) {
+    const cleanAkhir = clampBreakdown(rawItem.stokAkhir);
+    const cleanAwal = clampBreakdown(rawItem.stokAwal);
+    const cleanMasuk = clampBreakdown(rawItem.materialMasuk);
+    const cleanKeluar = clampBreakdown(rawItem.materialKeluar);
+    const cleanStock = clampNumber(
+      cleanAkhir.total >= 0 ? cleanAkhir.total : rawItem.currentStock,
+      0,
+      FIELD_LIMITS.maxStock
+    );
+    const cleanMin = clampNumber(rawItem.minThreshold, 0, FIELD_LIMITS.maxStock);
+    const cleanCrit = clampNumber(rawItem.criticalThreshold, 0, cleanMin);
+    const cleanCap = clampNumber(
+      rawItem.maxCapacity,
+      Math.max(1, cleanStock),
+      FIELD_LIMITS.maxStock
+    );
+    const cleanPrice = clampNumber(rawItem.unitPrice, 0, FIELD_LIMITS.maxUnitPrice);
+    const cleanSku = clampString(rawItem.sku, FIELD_LIMITS.skuMax).replace(
+      /[^a-zA-Z0-9\-_]/g,
+      '-'
+    );
+    const cleanName = clampString(rawItem.name, FIELD_LIMITS.materialNameMax);
+    const cleanUnit = clampString(rawItem.unit || 'BH', FIELD_LIMITS.unitMax);
+    const cleanSupplier = clampString(
+      rawItem.supplierName.length >= 2 ? rawItem.supplierName : 'Gudang Logistik PLN',
+      FIELD_LIMITS.supplierMax
+    );
+    const cleanZone = clampString(
+      rawItem.warehouseZone || 'Gd Ry Sinjai',
+      FIELD_LIMITS.zoneMax
+    );
+    const cleanNotes = clampString(rawItem.notes || '', FIELD_LIMITS.notesMax);
+    const newStatus = computeMaterialStatus(cleanStock, cleanMin, cleanCrit);
+    const matched =
+      bySku.get(cleanSku.toLowerCase()) || byName.get(cleanName.toLowerCase());
+    const active = hasMaterialActivity(rawItem);
+
+    if (matched && onlyChanged) {
+      const cleanRowNum = clampNumber(
+        Math.round(rawItem.rowNumber || matched.rowNumber || 1),
+        0,
+        1000000
+      );
+      const isSame =
+        (matched.rowNumber || 0) === cleanRowNum &&
+        matched.name === cleanName &&
+        matched.category === rawItem.category &&
+        matched.unit === cleanUnit &&
+        matched.currentStock === cleanStock &&
+        matched.warehouseZone === cleanZone &&
+        (matched.notes || '') === cleanNotes &&
+        matched.status === newStatus &&
+        breakdownEquals(matched.stokAwal, cleanAwal) &&
+        breakdownEquals(matched.materialMasuk, cleanMasuk) &&
+        breakdownEquals(matched.materialKeluar, cleanKeluar) &&
+        breakdownEquals(matched.stokAkhir, cleanAkhir);
+
+      if (isSame) {
+        continue;
+      }
+    }
+
+    pendingOps.push({
+      mode: matched ? 'update' : 'create',
+      matched,
+      rawItem,
+      cleanAkhir,
+      cleanAwal,
+      cleanMasuk,
+      cleanKeluar,
+      cleanStock,
+      cleanMin,
+      cleanCrit,
+      cleanCap,
+      cleanPrice,
+      cleanSku,
+      cleanName,
+      cleanUnit,
+      cleanSupplier,
+      cleanZone,
+      cleanNotes,
+      newStatus,
+      active,
+    });
+  }
+
+  if (pendingOps.length === 0) {
+    return { createdCount: 0, updatedCount: 0, notificationsTriggered: 0 };
+  }
+
   let createdCount = 0;
   let updatedCount = 0;
   let notificationsTriggered = 0;
 
   const CHUNK_SIZE = 120;
-  for (let start = 0; start < parsedMaterials.length; start += CHUNK_SIZE) {
-    const chunk = parsedMaterials.slice(start, start + CHUNK_SIZE);
+  for (let start = 0; start < pendingOps.length; start += CHUNK_SIZE) {
+    const chunk = pendingOps.slice(start, start + CHUNK_SIZE);
     const batch = writeBatch(db);
 
-    for (const rawItem of chunk) {
-      const cleanAkhir = clampBreakdown(rawItem.stokAkhir);
-      const cleanAwal = clampBreakdown(rawItem.stokAwal);
-      const cleanMasuk = clampBreakdown(rawItem.materialMasuk);
-      const cleanKeluar = clampBreakdown(rawItem.materialKeluar);
-      const cleanStock = clampNumber(
-        cleanAkhir.total >= 0 ? cleanAkhir.total : rawItem.currentStock,
-        0,
-        FIELD_LIMITS.maxStock
-      );
-      const cleanMin = clampNumber(rawItem.minThreshold, 0, FIELD_LIMITS.maxStock);
-      const cleanCrit = clampNumber(rawItem.criticalThreshold, 0, cleanMin);
-      const cleanCap = clampNumber(
-        rawItem.maxCapacity,
-        Math.max(1, cleanStock),
-        FIELD_LIMITS.maxStock
-      );
-      const cleanPrice = clampNumber(rawItem.unitPrice, 0, FIELD_LIMITS.maxUnitPrice);
-      const cleanSku = clampString(rawItem.sku, FIELD_LIMITS.skuMax).replace(
-        /[^a-zA-Z0-9\-_]/g,
-        '-'
-      );
-      const cleanName = clampString(rawItem.name, FIELD_LIMITS.materialNameMax);
-      const cleanUnit = clampString(rawItem.unit || 'BH', FIELD_LIMITS.unitMax);
-      const cleanSupplier = clampString(
-        rawItem.supplierName.length >= 2 ? rawItem.supplierName : 'Gudang Logistik PLN',
-        FIELD_LIMITS.supplierMax
-      );
-      const cleanZone = clampString(
-        rawItem.warehouseZone || 'Gd Ry Sinjai',
-        FIELD_LIMITS.zoneMax
-      );
-      const cleanNotes = clampString(rawItem.notes || '', FIELD_LIMITS.notesMax);
+    for (const op of chunk) {
+      const {
+        mode,
+        matched,
+        rawItem,
+        cleanAkhir,
+        cleanAwal,
+        cleanMasuk,
+        cleanKeluar,
+        cleanStock,
+        cleanMin,
+        cleanCrit,
+        cleanCap,
+        cleanPrice,
+        cleanSku,
+        cleanName,
+        cleanUnit,
+        cleanSupplier,
+        cleanZone,
+        cleanNotes,
+        newStatus,
+        active,
+      } = op;
 
-      const newStatus = computeMaterialStatus(cleanStock, cleanMin, cleanCrit);
-      const matched =
-        bySku.get(cleanSku.toLowerCase()) || byName.get(cleanName.toLowerCase());
-      const active = hasMaterialActivity(rawItem);
-
-      if (matched) {
+      if (mode === 'update' && matched) {
         const matRef = doc(db, 'projects', projectId, 'materials', matched.id);
         batch.update(matRef, {
-          rowNumber: clampNumber(Math.round(rawItem.rowNumber || matched.rowNumber || 1), 0, 1000000),
+          rowNumber: clampNumber(
+            Math.round(rawItem.rowNumber || matched.rowNumber || 1),
+            0,
+            1000000
+          ),
           name: cleanName,
           category: rawItem.category,
           unit: cleanUnit,
@@ -1119,7 +1278,7 @@ export async function syncMaterialsFromSheet(
           );
           batch.set(movRef, {
             projectId,
-            ownerId: user.uid,
+            ownerId: operator.uid,
             materialId: matched.id,
             materialName: cleanName,
             materialSku: matched.sku,
@@ -1131,9 +1290,9 @@ export async function syncMaterialsFromSheet(
             ),
             previousStock: matched.currentStock,
             newStock: cleanStock,
-            referenceNo: 'GSHEET-SYNC',
+            referenceNo: 'GSHEET-AUTO',
             actorName: clampString(
-              user.displayName || user.email || 'Sinkronisasi Sheets',
+              operator.displayName || operator.email || 'Auto-Sinkronisasi 10 Menit',
               FIELD_LIMITS.actorMax
             ),
             notes: clampString(
@@ -1161,7 +1320,7 @@ export async function syncMaterialsFromSheet(
             notifRef,
             buildAlertPayload(
               projectId,
-              user.uid,
+              operator.uid,
               matched.id,
               cleanName,
               matched.sku,
@@ -1194,7 +1353,7 @@ export async function syncMaterialsFromSheet(
           );
           batch.set(restockNotifRef, {
             projectId,
-            ownerId: user.uid,
+            ownerId: operator.uid,
             materialId: matched.id,
             materialName: cleanName,
             materialSku: matched.sku,
@@ -1215,11 +1374,14 @@ export async function syncMaterialsFromSheet(
           notificationsTriggered++;
         }
       } else {
-        const materialId = generateDocId('mat');
+        const materialId = `mat-csv-${String(rawItem.rowNumber || 1).padStart(
+          4,
+          '0'
+        )}-${cleanSku.toLowerCase().slice(0, 14)}`;
         const matRef = doc(db, 'projects', projectId, 'materials', materialId);
         batch.set(matRef, {
           projectId,
-          ownerId: user.uid,
+          ownerId: operator.uid,
           rowNumber: clampNumber(Math.round(rawItem.rowNumber || 1), 0, 1000000),
           sku: cleanSku,
           name: cleanName,
@@ -1253,7 +1415,7 @@ export async function syncMaterialsFromSheet(
           );
           batch.set(movRef, {
             projectId,
-            ownerId: user.uid,
+            ownerId: operator.uid,
             materialId,
             materialName: cleanName,
             materialSku: cleanSku,
@@ -1267,7 +1429,7 @@ export async function syncMaterialsFromSheet(
             newStock: cleanStock,
             referenceNo: 'GSHEET-INIT',
             actorName: clampString(
-              user.displayName || user.email || 'Sinkronisasi Sheets',
+              operator.displayName || operator.email || 'Auto-Sinkronisasi 10 Menit',
               FIELD_LIMITS.actorMax
             ),
             notes: clampString(
@@ -1290,7 +1452,7 @@ export async function syncMaterialsFromSheet(
             notifRef,
             buildAlertPayload(
               projectId,
-              user.uid,
+              operator.uid,
               materialId,
               cleanName,
               cleanSku,
@@ -1318,26 +1480,68 @@ export async function syncMaterialsFromSheet(
 }
 
 export async function createProjectFromSheet(
-  user: User,
+  operator: PublicOperator,
   projectName: string,
   sheetTitle: string,
   parsedMaterials: MaterialFormInput[]
 ): Promise<{ projectId: string; result: SheetSyncResult }> {
-  const projectId = await createProject(user, {
+  const projectId = await createProject(operator, {
     name: clampString(projectName || 'Gd Ry Sinjai', FIELD_LIMITS.projectNameMax),
     location: clampString(`Sumber: ${sheetTitle}`, FIELD_LIMITS.locationMax),
     managerName: clampString(
-      user.displayName || user.email || 'Manajer Gudang',
+      operator.displayName || operator.email || 'Petugas Gudang',
       FIELD_LIMITS.managerNameMax
     ),
   });
 
   const result = await rebuildProjectFromSheetItems(
-    user,
+    operator,
     projectId,
     parsedMaterials,
     sheetTitle
   );
 
   return { projectId, result };
+}
+
+export function buildLocalMaterialsFromCsvItems(
+  projectId: string,
+  ownerId: string,
+  items: MaterialFormInput[]
+): Material[] {
+  return items.map((item) => {
+    const cleanStock = clampNumber(
+      item.stokAkhir.total >= 0 ? item.stokAkhir.total : item.currentStock,
+      0,
+      FIELD_LIMITS.maxStock
+    );
+    const status = computeMaterialStatus(
+      cleanStock,
+      item.minThreshold,
+      item.criticalThreshold
+    );
+    return {
+      id: `local-csv-${String(item.rowNumber).padStart(4, '0')}`,
+      projectId,
+      ownerId,
+      rowNumber: item.rowNumber,
+      sku: item.sku,
+      name: item.name,
+      category: item.category,
+      unit: item.unit,
+      currentStock: cleanStock,
+      stokAwal: item.stokAwal,
+      materialMasuk: item.materialMasuk,
+      materialKeluar: item.materialKeluar,
+      stokAkhir: item.stokAkhir,
+      minThreshold: item.minThreshold,
+      criticalThreshold: item.criticalThreshold,
+      maxCapacity: item.maxCapacity,
+      unitPrice: item.unitPrice,
+      supplierName: item.supplierName,
+      warehouseZone: item.warehouseZone,
+      notes: item.notes,
+      status,
+    };
+  });
 }

@@ -40,6 +40,13 @@ export const SHEET_PRESETS: SheetPreset[] = [
     gid: 517228494,
     url: 'https://docs.google.com/spreadsheets/d/1Nd_V6zvnVZ-JHBXwD1px4LcP5ltJJ5fd/edit?gid=517228494#gid=517228494',
   },
+  {
+    id: 'kpi-pelanggan-mva-csv',
+    label: 'KPI Pelanggan & Daya MVA (CSV Live gid: 0)',
+    mode: 'csv',
+    gid: 0,
+    url: 'https://docs.google.com/spreadsheets/d/11YqAwNjEJiITbtL-KPXOZV5ygdVhT14cbdtwUQb0SB8/export?format=csv&gid=0',
+  },
 ];
 
 export const DEFAULT_SPREADSHEET_URL = PUBLISHED_SHEET_CSV_URL;
@@ -113,6 +120,22 @@ export function parseGoogleSheetUrl(inputUrl: string): {
     spreadsheetId: idMatch ? idMatch[1] : directIdMatch,
     gid: gidMatch ? Number(gidMatch[1]) : null,
   };
+}
+
+export function resolvePublicCsvUrl(inputUrl: string): string | null {
+  const trimmed = inputUrl.trim();
+  if (!trimmed) return null;
+  if (isPublishedCsvUrl(trimmed)) {
+    return trimmed;
+  }
+  const { spreadsheetId, gid } = parseGoogleSheetUrl(trimmed);
+  if (spreadsheetId) {
+    const gidParam = gid !== null ? `&gid=${gid}` : '';
+    return `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+      spreadsheetId
+    )}/export?format=csv${gidParam}`;
+  }
+  return null;
 }
 
 export async function fetchPublishedCsvValues(url: string): Promise<string[][]> {
