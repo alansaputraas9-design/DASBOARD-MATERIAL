@@ -22,8 +22,8 @@ import {
 } from 'lucide-react';
 import { Component, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { InventoryView } from './components/InventoryView';
-import { KalebajengEmblem } from './components/KalebajengEmblem';
 import { KpiTargetView } from './components/KpiTargetView';
+import { PlnEmblem } from './components/PlnEmblem';
 import {
   DeleteConfirmModal,
   MaterialModal,
@@ -137,12 +137,7 @@ function DashboardApp() {
   const [rebuildingCsv, setRebuildingCsv] = useState(false);
   const [rebuildingBanner, setRebuildingBanner] = useState<string | null>(null);
 
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('binalogistik-theme') === 'dark';
-    }
-    return false;
-  });
+  const [darkMode, setDarkMode] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -489,8 +484,8 @@ function DashboardApp() {
   return (
     <>
       {rebuildingBanner && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-md w-[92%] bg-cyan-900 text-white border border-cyan-500/50 rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 text-xs font-medium">
-          <RefreshCw className="w-4 h-4 animate-spin text-cyan-300 shrink-0" />
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-md w-[92%] bg-sky-600 text-white border border-sky-300 rounded-xl shadow-xl px-4 py-3 flex items-center gap-3 text-xs font-medium">
+          <RefreshCw className="w-4 h-4 animate-spin text-amber-200 shrink-0" />
           <span>{rebuildingBanner}</span>
         </div>
       )}
@@ -516,43 +511,48 @@ function DashboardApp() {
           }}
         />
       ) : (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
+        <div className="min-h-screen bg-gradient-to-br from-sky-50/85 via-white to-amber-50/35 dark:bg-none dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
           {mobileMenuOpen && (
             <div
-              className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden"
+              className="fixed inset-0 z-30 bg-slate-900/30 lg:hidden"
               onClick={() => setMobileMenuOpen(false)}
             />
           )}
 
           {/* Left Workspace Sidebar */}
           <aside
-            className={`fixed inset-y-0 left-0 z-40 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-200 lg:static lg:translate-x-0 ${
+            className={`fixed inset-y-0 left-0 z-40 bg-white dark:bg-slate-900 border-r border-sky-200/80 dark:border-slate-800 flex flex-col transition-all duration-200 lg:static lg:translate-x-0 ${
               sidebarCollapsed ? 'w-64 lg:w-16' : 'w-64'
             } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
           >
             <div
-              className={`h-14 border-b border-slate-200 dark:border-slate-800 flex items-center shrink-0 ${
+              className={`h-14 border-b border-sky-100 dark:border-slate-800 flex items-center shrink-0 ${
                 sidebarCollapsed ? 'px-5 lg:px-0 lg:justify-center' : 'px-4 justify-between'
               }`}
             >
               <button
                 type="button"
                 onClick={() => setActiveTab('home')}
-                className={`flex items-center gap-2 text-left min-w-0 ${
+                className={`flex items-center gap-2.5 text-left min-w-0 ${
                   sidebarCollapsed ? 'lg:hidden' : ''
                 }`}
-                title="Kembali ke Portal Utama"
+                title="Kembali ke Portal Utama PLN"
               >
-                <KalebajengEmblem size="sm" />
-                <span className="text-base font-bold tracking-tight font-display text-slate-900 dark:text-slate-100 whitespace-nowrap truncate">
-                  BinaLogistik
-                </span>
+                <PlnEmblem size="sm" />
+                <div className="min-w-0">
+                  <span className="block text-sm font-bold tracking-tight font-display text-slate-900 dark:text-slate-100 whitespace-nowrap truncate leading-tight">
+                    PLN · BinaLogistik
+                  </span>
+                  <span className="block text-[10px] font-bold text-amber-600 whitespace-nowrap truncate leading-tight">
+                    Terang, Benderang, Yess
+                  </span>
+                </div>
               </button>
 
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed((c) => !c)}
-                className="hidden lg:inline-flex p-1.5 text-slate-500 hover:text-cyan-700 dark:hover:text-cyan-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="hidden lg:inline-flex p-1.5 text-slate-500 hover:text-sky-700 dark:hover:text-cyan-400 rounded-md hover:bg-sky-50 dark:hover:bg-slate-800 transition-colors"
                 aria-label={sidebarCollapsed ? 'Perluas sidebar' : 'Perkecil sidebar'}
                 title={sidebarCollapsed ? 'Perluas sidebar' : 'Perkecil sidebar'}
               >
@@ -649,8 +649,8 @@ function DashboardApp() {
                         : 'justify-between px-3 py-2.5'
                     } text-sm font-medium ${
                       isActive
-                        ? 'bg-cyan-700 text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-slate-100'
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-sky-50 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-slate-100'
                     }`}
                   >
                     <span className="flex items-center gap-2.5 min-w-0">
@@ -716,7 +716,7 @@ function DashboardApp() {
 
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
-            <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4 shrink-0">
+            <header className="h-14 bg-white/95 dark:bg-slate-900 backdrop-blur-sm border-b border-sky-200/80 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4 shrink-0">
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                 <button
                   type="button"
@@ -731,11 +731,13 @@ function DashboardApp() {
                   type="button"
                   onClick={() => setActiveTab('home')}
                   title="Kembali ke Portal Utama"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-400 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shrink-0 transition-colors"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-sky-700 dark:hover:text-cyan-400 bg-sky-50/70 dark:bg-slate-950 border border-sky-200/80 dark:border-slate-800 shrink-0 transition-colors"
                 >
-                  <Home className="w-3.5 h-3.5" />
+                  <Home className="w-3.5 h-3.5 text-sky-700" />
                   <span className="hidden sm:inline">Portal</span>
                 </button>
+
+                <PlnEmblem size="sm" className="hidden sm:flex" />
 
                 <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs sm:text-sm min-w-0">
                   <span className="text-slate-600 dark:text-slate-300 truncate max-w-[140px] sm:max-w-[240px]">
@@ -755,7 +757,7 @@ function DashboardApp() {
                   type="button"
                   disabled={!activeProject || isCompleted || materials.length === 0}
                   onClick={() => setMovementModalState({ open: true, type: 'out' })}
-                  className="px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap shrink-0"
+                  className="px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-sky-200 dark:border-slate-800 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap shrink-0"
                 >
                   Catat Mutasi
                 </button>
@@ -764,7 +766,7 @@ function DashboardApp() {
                   type="button"
                   disabled={!activeProject || isCompleted}
                   onClick={() => setMaterialModalState({ open: true, editing: null })}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-cyan-700 hover:bg-cyan-800 rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Tambah Material</span>
@@ -779,7 +781,7 @@ function DashboardApp() {
             )}
 
             {isCompleted && (
-              <div className="bg-slate-800 text-slate-100 px-6 py-2.5 text-xs flex items-center justify-between gap-4">
+              <div className="bg-amber-50 border-b border-amber-200 text-amber-950 px-6 py-2.5 text-xs flex items-center justify-between gap-4">
                 <span>
                   Gudang berstatus <strong>Selesai</strong>. Perubahan stok dan mutasi baru dikunci untuk menjaga arsip audit.
                 </span>

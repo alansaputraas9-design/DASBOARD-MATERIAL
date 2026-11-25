@@ -17,10 +17,10 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import kalebajengHeroImg from '../assets/images/kalebajeng_hero_backdrop_1795579000638.jpg';
+import kalebajengPlnHeroImg from '../assets/images/kalebajeng_pln_daylight_hero_1795586564030.jpg';
 import { hasMaterialActivity } from '../services/inventoryService';
 import { Material, Project, StockMovement, StockNotification } from '../types/inventory';
-import { KalebajengEmblem } from './KalebajengEmblem';
+import { PlnEmblem } from './PlnEmblem';
 
 interface PortalHomeViewProps {
   project: Project | null;
@@ -111,7 +111,7 @@ export function PortalHomeView({
       description: 'Ringkasan Stok Awal, Masuk, Keluar & Akhir untuk DIST, AGA, TE',
       metric: `${totalStokAkhir.toLocaleString('id-ID')} Stok Akhir`,
       metricColor: 'text-emerald-700',
-      icon: <LayoutDashboard className="w-5 h-5 text-cyan-700" />,
+      icon: <LayoutDashboard className="w-5 h-5 text-sky-700" />,
       action: () => onNavigateTab('overview'),
     },
     {
@@ -119,8 +119,8 @@ export function PortalHomeView({
       title: 'Log Mutasi Masuk & Keluar',
       description: 'Riwayat mutasi material per bidang (DIST, AGA, TE) secara real-time',
       metric: `${movements.length.toLocaleString('id-ID')} Log`,
-      metricColor: 'text-cyan-700',
-      icon: <ArrowLeftRight className="w-5 h-5 text-cyan-600" />,
+      metricColor: 'text-sky-700',
+      icon: <ArrowLeftRight className="w-5 h-5 text-sky-600" />,
       action: () => onNavigateTab('movements'),
     },
     {
@@ -161,60 +161,68 @@ export function PortalHomeView({
       title: 'KPI Pelanggan, MVA, BP & Saldo',
       description: 'Grafik target vs realisasi Delta Pelanggan, MVA, BP & Saldo (4 Tab)',
       metric: 'KPI Live · gid=0',
-      metricColor: 'text-cyan-700',
-      icon: <TrendingUp className="w-5 h-5 text-cyan-600" />,
+      metricColor: 'text-sky-700',
+      icon: <TrendingUp className="w-5 h-5 text-sky-600" />,
       action: () => onNavigateTab('kpi'),
     },
   ];
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden flex flex-col justify-between bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-950">
+    <div className="relative min-h-screen w-full overflow-hidden flex flex-col justify-between bg-gradient-to-br from-sky-100 via-cyan-50 to-white text-slate-900">
       {!imgError && (
         <img
-          src={kalebajengHeroImg}
-          alt="Arsitektur tradisional Balla Lompoa dan hamparan sawah wilayah Kalebajeng, Kecamatan Bajeng, Kabupaten Gowa, Sulawesi Selatan"
+          src={kalebajengPlnHeroImg}
+          alt="Panorama Cerah Arsitektur Balla Lompoa Wilayah Kalebajeng, Persawahan Hijau Gowa, dan Gardu Listrik PLN di bawah Langit Cerah"
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
-          className="absolute inset-0 w-full h-full object-cover object-center select-none pointer-events-none"
+          className="absolute inset-0 w-full h-full object-cover object-center brightness-105 contrast-[0.98] select-none pointer-events-none"
         />
       )}
 
+      {/* Bright Daylight Wash & Warm Sunbeam Overlay */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-emerald-950/35 to-slate-950/85 pointer-events-none"
+        className="absolute inset-0 bg-gradient-to-b from-white/70 via-sky-50/10 to-white/85 pointer-events-none"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(254,240,138,0.48),rgba(186,230,253,0.18)_48%,transparent_78%)] pointer-events-none"
         aria-hidden="true"
       />
 
-      {/* Top Portal Header */}
-      <header className="relative z-20 px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-          <KalebajengEmblem size="md" />
+      {/* Top Portal Header — Pojok Kiri Atas dengan Lambang PLN & Semboyan */}
+      <header className="relative z-20 px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+        <div className="flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/92 backdrop-blur-md border border-sky-200/90 shadow-sm min-w-0">
+          <PlnEmblem size="lg" />
           <div className="min-w-0">
             <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5">
-              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-white uppercase leading-none font-display">
-                Dasbor Monitoring Material Gudang
+              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 uppercase leading-none font-display">
+                Dasbor Monitoring Material PLN
               </h1>
-              <span className="text-xs font-semibold font-mono text-emerald-300 tracking-wide">
+              <span className="text-xs font-semibold font-mono text-sky-700 tracking-wide">
                 · REAL-TIME DB
               </span>
             </div>
-            <div className="mt-1.5 flex items-center flex-wrap gap-2 text-xs text-slate-200">
-              <span className="font-medium text-amber-300 truncate max-w-xs sm:max-w-md">
+            <div className="mt-1 text-xs sm:text-sm font-bold tracking-wide text-amber-600 font-display">
+              Terang, Benderang, Yess
+            </div>
+            <div className="mt-1 flex items-center flex-wrap gap-2 text-xs text-slate-600">
+              <span className="font-semibold text-sky-800 truncate max-w-xs sm:max-w-md">
                 {project?.name || 'Gd Ry Sinjai — Monitoring Material'}
               </span>
               {project?.location && (
                 <>
-                  <span aria-hidden="true" className="text-white/40">·</span>
-                  <span className="text-white/80 truncate">{project.location}</span>
+                  <span aria-hidden="true" className="text-slate-300">·</span>
+                  <span className="text-slate-600 truncate">{project.location}</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* Live Operational Glassmorphic Widgets */}
+        {/* Live Operational Light Glass Widgets */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="px-3 py-1.5 rounded-xl bg-white/80 backdrop-blur-md border border-white/60 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wider text-slate-600 font-bold font-mono leading-none">
+          <div className="px-3 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-sky-200/80 shadow-sm">
+            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold font-mono leading-none">
               Waktu Lokal
             </div>
             <div className="text-sm font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
@@ -222,9 +230,9 @@ export function PortalHomeView({
             </div>
           </div>
 
-          <div className="px-3 py-1.5 rounded-xl bg-white/80 backdrop-blur-md border border-white/60 shadow-sm">
+          <div className="px-3 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-sky-200/80 shadow-sm">
             <div className="text-[10px] uppercase tracking-wider text-slate-600 font-bold font-mono leading-none flex items-center gap-1">
-              <CalendarDays className="w-3 h-3 text-cyan-700" />
+              <CalendarDays className="w-3 h-3 text-sky-700" />
               <span>{dateFormatted}</span>
             </div>
             <div className="text-xs font-semibold text-slate-950 leading-tight mt-0.5 flex items-center gap-1">
@@ -238,7 +246,7 @@ export function PortalHomeView({
           <button
             type="button"
             onClick={() => onNavigateTab('sheets')}
-            className="px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white/95 backdrop-blur-md border border-white/60 hover:border-emerald-500 shadow-sm transition-all text-left group flex items-center gap-2"
+            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-emerald-500 shadow-sm transition-all text-left group flex items-center gap-2"
           >
             <div>
               <div className="text-[10px] uppercase tracking-wider text-emerald-800 font-bold font-mono leading-none flex items-center gap-1">
@@ -249,13 +257,13 @@ export function PortalHomeView({
                 Gd Ry Sinjai · Live
               </div>
             </div>
-            <RefreshCw className="w-3.5 h-3.5 text-emerald-800 group-hover:rotate-45 transition-transform" />
+            <RefreshCw className="w-3.5 h-3.5 text-emerald-700 group-hover:rotate-45 transition-transform" />
           </button>
 
           <button
             type="button"
             onClick={() => onNavigateTab('piket')}
-            className="px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white/95 backdrop-blur-md border border-white/60 hover:border-amber-500 shadow-sm transition-all text-left group flex items-center gap-2"
+            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-amber-500 shadow-sm transition-all text-left group flex items-center gap-2"
           >
             <div>
               <div className="text-[10px] uppercase tracking-wider text-amber-800 font-bold font-mono leading-none flex items-center gap-1">
@@ -271,7 +279,7 @@ export function PortalHomeView({
           <button
             type="button"
             onClick={() => onNavigateTab('workbook')}
-            className="px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white/95 backdrop-blur-md border border-white/60 hover:border-indigo-500 shadow-sm transition-all text-left group flex items-center gap-2"
+            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-indigo-500 shadow-sm transition-all text-left group flex items-center gap-2"
           >
             <div>
               <div className="text-[10px] uppercase tracking-wider text-indigo-800 font-bold font-mono leading-none flex items-center gap-1">
@@ -287,11 +295,11 @@ export function PortalHomeView({
           <button
             type="button"
             onClick={() => onNavigateTab('kpi')}
-            className="px-3 py-1.5 rounded-xl bg-white/80 hover:bg-white/95 backdrop-blur-md border border-white/60 hover:border-cyan-500 shadow-sm transition-all text-left group flex items-center gap-2"
+            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-sky-500 shadow-sm transition-all text-left group flex items-center gap-2"
           >
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-cyan-800 font-bold font-mono leading-none flex items-center gap-1">
-                <TrendingUp className="w-3 h-3 text-cyan-700" />
+              <div className="text-[10px] uppercase tracking-wider text-sky-800 font-bold font-mono leading-none flex items-center gap-1">
+                <TrendingUp className="w-3 h-3 text-sky-700" />
                 <span>KPI &amp; Grafik</span>
               </div>
               <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
@@ -305,7 +313,7 @@ export function PortalHomeView({
               aria-label="Pilih proyek aktif"
               value={project?.id || ''}
               onChange={(e) => onSelectProject(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white/85 backdrop-blur-md border border-white/60 text-xs font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 max-w-[200px]"
+              className="px-3 py-2 rounded-xl bg-white/92 backdrop-blur-md border border-sky-200/85 text-xs font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 max-w-[200px]"
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -318,7 +326,7 @@ export function PortalHomeView({
           <button
             type="button"
             onClick={onQuickMovement}
-            className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
+            className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold shadow-sm transition-colors whitespace-nowrap"
           >
             Catat Mutasi
           </button>
@@ -326,7 +334,7 @@ export function PortalHomeView({
           <button
             type="button"
             onClick={onOpenNewProject}
-            className="px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
+            className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
           >
             + Gudang
           </button>
@@ -339,13 +347,13 @@ export function PortalHomeView({
           <button
             type="button"
             onClick={() => onNavigateTab('notifications')}
-            className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-red-950/75 hover:bg-red-900/85 backdrop-blur-md border border-red-400/40 text-xs text-white transition-colors"
+            className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-rose-50/95 hover:bg-rose-100 backdrop-blur-md border border-rose-300 text-xs text-rose-900 shadow-sm transition-colors"
           >
-            <BellRing className="w-4 h-4 text-amber-300 shrink-0" />
+            <BellRing className="w-4 h-4 text-rose-600 shrink-0" />
             <span>
               <strong className="font-mono tabular-nums">{alertCount}</strong> material aktif berada di bawah ambang batas stok aman
             </span>
-            <ArrowRight className="w-3.5 h-3.5 text-amber-300" />
+            <ArrowRight className="w-3.5 h-3.5 text-rose-600" />
           </button>
         )}
       </div>
@@ -358,22 +366,22 @@ export function PortalHomeView({
         <button
           type="button"
           onClick={() => onNavigateTab('workbook')}
-          className="w-full group text-left px-4 py-3 rounded-xl bg-cyan-950/80 hover:bg-cyan-900/90 backdrop-blur-md border border-cyan-400/50 hover:border-cyan-300 transition-all duration-200 shadow-sm hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+          className="w-full group text-left px-4 py-3 rounded-xl bg-white/92 hover:bg-white backdrop-blur-md border border-sky-300/85 hover:border-sky-500 transition-all duration-200 shadow-sm hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 w-10 h-10 rounded-lg bg-cyan-500/20 border border-cyan-300/40 flex items-center justify-center">
-              <Layers className="w-5 h-5 text-cyan-300" />
+            <div className="shrink-0 w-10 h-10 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center">
+              <Layers className="w-5 h-5 text-sky-700" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xs sm:text-sm font-bold text-white uppercase tracking-tight">
+              <h2 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-tight">
                 Rekap Workbook Material &amp; Mutasi (10 Sheet Terlampir)
               </h2>
-              <p className="text-[11px] text-cyan-100/85 truncate mt-0.5">
+              <p className="text-[11px] text-slate-600 truncate mt-0.5">
                 Dikelompokkan per sheet: Varian Material, STOK (referensi), MATERIAL MASUK, MATERIAL KELUAR, Sheet5, Sheet4, Sheet1 (1) &amp; Sheet1–3
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 text-xs font-mono font-semibold text-cyan-200">
+          <div className="flex items-center gap-2 shrink-0 text-xs font-mono font-semibold text-sky-700">
             <span>Buka 10 Sheet</span>
             <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
           </div>
@@ -385,14 +393,14 @@ export function PortalHomeView({
               key={card.id}
               type="button"
               onClick={card.action}
-              className="group text-left px-3.5 py-3 rounded-xl bg-white/80 hover:bg-white/95 backdrop-blur-md border border-white/65 hover:border-cyan-400 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex items-center gap-3"
+              className="group text-left px-3.5 py-3 rounded-xl bg-white/92 hover:bg-white backdrop-blur-md border border-sky-200/75 hover:border-sky-500 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex items-center gap-3"
             >
-              <div className="shrink-0 w-10 h-10 rounded-lg bg-white/80 border border-slate-200/70 flex items-center justify-center shadow-2xs">
+              <div className="shrink-0 w-10 h-10 rounded-lg bg-sky-50/80 border border-sky-100 flex items-center justify-center shadow-2xs">
                 {card.icon}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
-                  <h2 className="text-xs sm:text-[13px] font-bold text-slate-950 group-hover:text-cyan-900 uppercase tracking-tight leading-snug truncate">
+                  <h2 className="text-xs sm:text-[13px] font-bold text-slate-950 group-hover:text-sky-800 uppercase tracking-tight leading-snug truncate">
                     {card.title}
                   </h2>
                   <span
@@ -401,20 +409,20 @@ export function PortalHomeView({
                     {card.metric}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-700 font-medium truncate mt-0.5">
+                <p className="text-[11px] text-slate-600 font-medium truncate mt-0.5">
                   {card.description}
                 </p>
               </div>
-              <div className="shrink-0 w-6 h-6 rounded-lg bg-slate-900/10 group-hover:bg-cyan-600 text-slate-800 group-hover:text-white flex items-center justify-center transition-colors">
+              <div className="shrink-0 w-6 h-6 rounded-lg bg-sky-100/80 group-hover:bg-sky-600 text-sky-700 group-hover:text-white flex items-center justify-center transition-colors">
                 <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </div>
             </button>
           ))}
         </div>
 
-        <footer className="px-1 pt-1 flex items-center justify-between text-[11px] text-white/90 gap-3">
+        <footer className="px-1 pt-1 flex items-center justify-between text-[11px] text-slate-700 gap-3">
           <div className="truncate">
-            © 2026 <span className="font-bold text-white">BinaLogistik</span> · Monitoring Material Gd Ry Sinjai Real-Time
+            © 2026 <span className="font-bold text-slate-900">PLN ULP Sinjai · BinaLogistik</span> · Monitoring Material Gd Ry Sinjai Real-Time
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -422,7 +430,7 @@ export function PortalHomeView({
               onClick={onToggleDarkMode}
               title={darkMode ? 'Mode Terang' : 'Mode Gelap'}
               aria-label="Ubah tema tampilan"
-              className="w-8 h-8 rounded-full bg-slate-950/60 hover:bg-cyan-600 text-white backdrop-blur-md border border-white/30 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-sky-600 text-slate-700 hover:text-white backdrop-blur-md border border-sky-200 shadow-xs flex items-center justify-center transition-colors"
             >
               {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
@@ -432,7 +440,7 @@ export function PortalHomeView({
                 onClick={onSignOut}
                 title="Keluar"
                 aria-label="Keluar akun"
-                className="w-8 h-8 rounded-full bg-slate-950/60 hover:bg-red-600 text-white backdrop-blur-md border border-white/30 flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-full bg-white/90 hover:bg-red-600 text-slate-700 hover:text-white backdrop-blur-md border border-sky-200 shadow-xs flex items-center justify-center transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
