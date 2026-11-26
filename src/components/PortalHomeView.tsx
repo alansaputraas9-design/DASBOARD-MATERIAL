@@ -63,38 +63,53 @@ export function PortalHomeView({
       WAREHOUSE_MONTH_TABS.find((t) => t.gid === '410640151') ||
       WAREHOUSE_MONTH_TABS[9];
 
-    Promise.allSettled([
-      fetchWarehouseMonthTab(oktTab),
-      fetchBpblTab('gowa'),
-    ]).then(([whRes, bpblRes]) => {
-      if (!active) return;
-      const next: LivePortalStats = {
-        warehouseItems: null,
-        warehouseMasuk: null,
-        warehouseKeluar: null,
-        bpblTotal: null,
-        bpblSiapMeter: null,
-      };
-      if (whRes.status === 'fulfilled') {
-        const items = whRes.value.items;
-        next.warehouseItems = items.length;
-        next.warehouseMasuk = items.reduce((s, i) => s + i.jumlahMasuk, 0);
-        next.warehouseKeluar = items.reduce((s, i) => s + i.jumlahKeluar, 0);
+    const loadPortalStats = () => {
+      Promise.allSettled([
+        fetchWarehouseMonthTab(oktTab),
+        fetchBpblTab('gowa'),
+      ]).then(([whRes, bpblRes]) => {
+        if (!active) return;
+        const next: LivePortalStats = {
+          warehouseItems: null,
+          warehouseMasuk: null,
+          warehouseKeluar: null,
+          bpblTotal: null,
+          bpblSiapMeter: null,
+        };
+        if (whRes.status === 'fulfilled') {
+          const items = whRes.value.items;
+          next.warehouseItems = items.length;
+          next.warehouseMasuk = items.reduce((s, i) => s + i.jumlahMasuk, 0);
+          next.warehouseKeluar = items.reduce((s, i) => s + i.jumlahKeluar, 0);
+        }
+        if (bpblRes.status === 'fulfilled') {
+          const recs = bpblRes.value.records;
+          next.bpblTotal = recs.length;
+          next.bpblSiapMeter = recs.filter(
+            (r) =>
+              r.stage === 'Sudah Terpasang' ||
+              r.stage === 'Aktivasi Meter (Sisa Cetak)'
+          ).length;
+        }
+        setStats(next);
+      });
+    };
+
+    loadPortalStats();
+    const onSync = () => {
+      if (document.visibilityState === 'visible') {
+        loadPortalStats();
       }
-      if (bpblRes.status === 'fulfilled') {
-        const recs = bpblRes.value.records;
-        next.bpblTotal = recs.length;
-        next.bpblSiapMeter = recs.filter(
-          (r) =>
-            r.stage === 'Sudah Terpasang' ||
-            r.stage === 'Aktivasi Meter (Sisa Cetak)'
-        ).length;
-      }
-      setStats(next);
-    });
+    };
+    const interval = window.setInterval(onSync, 60_000);
+    document.addEventListener('visibilitychange', onSync);
+    window.addEventListener('focus', onSync);
 
     return () => {
       active = false;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onSync);
+      window.removeEventListener('focus', onSync);
     };
   }, []);
 

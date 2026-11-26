@@ -103,9 +103,11 @@ export function WarehouseDashboard({ initialSection }: WarehouseDashboardProps =
     demandMultiplierPct: 100,
   });
 
-  const loadMonth = useCallback(async (gidOrUrl: string) => {
-    setLoadingPrimary(true);
-    setError(null);
+  const loadMonth = useCallback(async (gidOrUrl: string, silent = false) => {
+    if (!silent) {
+      setLoadingPrimary(true);
+      setError(null);
+    }
     try {
       const matchedTab = WAREHOUSE_MONTH_TABS.find((t) => t.gid === gidOrUrl);
       const parsed = await fetchWarehouseMonthTab(matchedTab || gidOrUrl);
@@ -113,18 +115,24 @@ export function WarehouseDashboard({ initialSection }: WarehouseDashboardProps =
         ...prev,
         [parsed.tab.gid]: parsed,
       }));
-      setSelectedGid(parsed.tab.gid);
-      setSelectedItemId(null);
+      if (!silent) {
+        setSelectedGid(parsed.tab.gid);
+        setSelectedItemId(null);
+      }
       return parsed;
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Gagal memuat data dari Google Spreadsheet.'
-      );
+      if (!silent) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : 'Gagal memuat data dari Google Spreadsheet.'
+        );
+      }
       return null;
     } finally {
-      setLoadingPrimary(false);
+      if (!silent) {
+        setLoadingPrimary(false);
+      }
     }
   }, []);
 
@@ -152,6 +160,22 @@ export function WarehouseDashboard({ initialSection }: WarehouseDashboardProps =
     });
   }, [loadMonth, loadAllMonthsInBackground]);
 
+  useEffect(() => {
+    const syncActive = () => {
+      if (document.visibilityState === 'visible') {
+        loadMonth(selectedGid, true);
+      }
+    };
+    const interval = window.setInterval(syncActive, 60_000);
+    document.addEventListener('visibilitychange', syncActive);
+    window.addEventListener('focus', syncActive);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', syncActive);
+      window.removeEventListener('focus', syncActive);
+    };
+  }, [selectedGid, loadMonth]);
+
   const activePeriod: WarehousePeriodData | null =
     periodsByGid[selectedGid] || null;
 
@@ -170,9 +194,7 @@ export function WarehouseDashboard({ initialSection }: WarehouseDashboardProps =
     setSelectedGid(gid);
     setSelectedItemId(null);
     setLogDayFilter('ALL');
-    if (!periodsByGid[gid]) {
-      loadMonth(gid);
-    }
+    loadMonth(gid, Boolean(periodsByGid[gid]));
   }
 
   async function handleLoadCustomLink() {

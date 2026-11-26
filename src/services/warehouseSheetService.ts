@@ -452,7 +452,8 @@ export async function fetchWarehouseMonthTab(
     targetTab = tabOrUrl;
   }
 
-  const url = getWarehouseCsvUrl(targetTab.gid, spreadsheetId);
+  const baseUrl = getWarehouseCsvUrl(targetTab.gid, spreadsheetId);
+  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(

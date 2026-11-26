@@ -69,29 +69,53 @@ export function BpblSheetSection() {
   const [wilayahFilter, setWilayahFilter] = useState<string>('ALL');
   const [nidiFilter, setNidiFilter] = useState<string>('ALL');
 
-  const loadTab = useCallback(async (target: BpblTabId | string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const parsed = await fetchBpblTab(target);
-      setTabData(parsed);
-      setStageFilter('ALL');
-      setUnitFilter('ALL');
-      setWilayahFilter('ALL');
-      setNidiFilter('ALL');
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Gagal memuat data spreadsheet BPBL.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadTab = useCallback(
+    async (target: BpblTabId | string, silent = false) => {
+      if (!silent) {
+        setLoading(true);
+        setError(null);
+      }
+      try {
+        const parsed = await fetchBpblTab(target);
+        setTabData(parsed);
+        if (!silent) {
+          setStageFilter('ALL');
+          setUnitFilter('ALL');
+          setWilayahFilter('ALL');
+          setNidiFilter('ALL');
+        }
+      } catch (err) {
+        if (!silent) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Gagal memuat data spreadsheet BPBL.'
+          );
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     loadTab(activeTabId);
+    const syncActive = () => {
+      if (document.visibilityState === 'visible') {
+        loadTab(activeTabId, true);
+      }
+    };
+    const interval = window.setInterval(syncActive, 60_000);
+    document.addEventListener('visibilitychange', syncActive);
+    window.addEventListener('focus', syncActive);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', syncActive);
+      window.removeEventListener('focus', syncActive);
+    };
   }, [activeTabId, loadTab]);
 
   const records = useMemo(() => tabData?.records || [], [tabData]);

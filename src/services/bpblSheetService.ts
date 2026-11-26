@@ -403,7 +403,8 @@ export async function fetchBpblTab(
     }
   }
 
-  const url = getBpblCsvUrl(gid, spreadsheetId);
+  const baseUrl = getBpblCsvUrl(gid, spreadsheetId);
+  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     throw new Error(
