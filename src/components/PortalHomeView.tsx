@@ -249,7 +249,7 @@ export function PortalHomeView({
           <PlnEmblem size="lg" />
           <div className="min-w-0">
             <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight font-display">
-              Dashboard Operasional &amp; Material PLN Kalebajeng
+              DASBOARD KINERJA ULP KALEBAJENG
             </h1>
             <div className="mt-1 flex items-center flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
               <span className="font-semibold text-cyan-700 dark:text-cyan-400">
@@ -259,7 +259,7 @@ export function PortalHomeView({
               <span>ULP Kalebajeng</span>
               <span aria-hidden="true">·</span>
               <span className="font-semibold text-amber-600 dark:text-amber-400">
-                Terang, Benderang, Yess
+                REWAKO
               </span>
             </div>
           </div>

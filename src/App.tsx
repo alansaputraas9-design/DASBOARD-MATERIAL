@@ -187,7 +187,7 @@ function DashboardShell() {
                   PLN ULP Kalebajeng
                 </div>
                 <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 truncate leading-tight">
-                  Terang, Benderang, Yess
+                  REWAKO
                 </div>
               </div>
             </button>
