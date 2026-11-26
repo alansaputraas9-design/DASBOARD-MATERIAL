@@ -39,7 +39,7 @@ interface GroupedBarChartProps {
 export function GroupedBarChart({
   data,
   series,
-  height = 260,
+  height = 250,
   unitLabel = '',
   ariaLabel = 'Grafik batang berkelompok',
 }: GroupedBarChartProps) {
@@ -60,35 +60,42 @@ export function GroupedBarChart({
     }
     if (maxVal === 0 && minVal === 0) maxVal = 10;
     const span = maxVal - minVal;
-    const paddedMax = maxVal > 0 ? maxVal + span * 0.08 : 0;
-    const paddedMin = minVal < 0 ? minVal - span * 0.08 : 0;
-    return { minVal: paddedMin, maxVal: paddedMax };
+    return {
+      minVal: minVal < 0 ? minVal - span * 0.08 : 0,
+      maxVal: maxVal > 0 ? maxVal + span * 0.08 : 10,
+    };
   }, [data, series]);
+
+  if (data.length === 0) {
+    return (
+      <div className="py-10 text-center text-xs text-slate-500">
+        Belum ada material bermutasi untuk ditampilkan pada grafik perbandingan.
+      </div>
+    );
+  }
 
   const svgWidth = 680;
   const svgHeight = height;
-  const padLeft = 64;
-  const padRight = 20;
-  const padTop = 18;
+  const padLeft = 60;
+  const padRight = 18;
+  const padTop = 16;
   const padBottom = 46;
   const plotW = svgWidth - padLeft - padRight;
   const plotH = svgHeight - padTop - padBottom;
 
   const span = Math.max(1, chartBounds.maxVal - chartBounds.minVal);
-  const zeroY = padTop + ((chartBounds.maxVal - 0) / span) * plotH;
+  const zeroY = padTop + (chartBounds.maxVal / span) * plotH;
 
-  const ticks = useMemo(() => {
-    const count = 4;
-    const arr: number[] = [];
-    for (let i = 0; i <= count; i++) {
-      arr.push(chartBounds.minVal + (span * i) / count);
-    }
-    return arr;
-  }, [chartBounds.minVal, span]);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map(
+    (r) => chartBounds.minVal + span * r
+  );
 
-  const groupW = data.length > 0 ? plotW / data.length : plotW;
+  const groupW = plotW / data.length;
   const barGap = 4;
-  const maxBarW = Math.min(28, Math.max(10, (groupW * 0.72) / Math.max(1, series.length) - barGap));
+  const maxBarW = Math.min(
+    26,
+    Math.max(8, (groupW * 0.72) / Math.max(1, series.length) - barGap)
+  );
   const totalGroupBarsW =
     series.length * maxBarW + Math.max(0, series.length - 1) * barGap;
 
@@ -99,7 +106,6 @@ export function GroupedBarChart({
 
   return (
     <div className="space-y-3">
-      {/* Legend & Active Readout */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {series.map((s) => (
@@ -120,13 +126,13 @@ export function GroupedBarChart({
           {activeDatum && activeSeries ? (
             <span>
               <strong>{activeDatum.category}</strong> · {activeSeries.label}:{' '}
-              <strong className="text-cyan-700 dark:text-cyan-300">
+              <strong className="text-sky-700 dark:text-sky-300">
                 {(activeDatum.values[activeSeries.key] ?? 0).toLocaleString('id-ID')}
                 {unitLabel ? ` ${unitLabel}` : ''}
               </strong>
             </span>
           ) : (
-            <span className="text-slate-400 dark:text-slate-500">
+            <span className="text-slate-400">
               Arahkan kursor ke batang grafik untuk detail angka
             </span>
           )}
@@ -140,7 +146,6 @@ export function GroupedBarChart({
           role="img"
           aria-label={ariaLabel}
         >
-          {/* Horizontal gridlines & Y ticks */}
           {ticks.map((tickVal, idx) => {
             const y = padTop + ((chartBounds.maxVal - tickVal) / span) * plotH;
             const isZero = Math.abs(tickVal) < 0.001;
@@ -157,7 +162,6 @@ export function GroupedBarChart({
                       : 'stroke-slate-200/80 dark:stroke-slate-800'
                   }
                   strokeDasharray={isZero ? undefined : '3 3'}
-                  strokeWidth={isZero ? 1.25 : 1}
                 />
                 <text
                   x={padLeft - 8}
@@ -171,13 +175,12 @@ export function GroupedBarChart({
             );
           })}
 
-          {/* Grouped Bars */}
           {data.map((row, catIdx) => {
             const groupCenterX = padLeft + groupW * catIdx + groupW / 2;
             const startX = groupCenterX - totalGroupBarsW / 2;
 
             return (
-              <g key={row.category}>
+              <g key={`${row.category}-${catIdx}`}>
                 {series.map((s, sIdx) => {
                   const val = row.values[s.key] ?? 0;
                   const valY = padTop + ((chartBounds.maxVal - val) / span) * plotH;
@@ -220,7 +223,7 @@ export function GroupedBarChart({
                     x={groupCenterX}
                     y={svgHeight - 8}
                     textAnchor="middle"
-                    className="fill-slate-500 dark:fill-slate-400 text-[10px]"
+                    className="fill-slate-500 dark:fill-slate-400 text-[10px] font-mono"
                   >
                     {row.subLabel}
                   </text>
@@ -245,40 +248,32 @@ export interface HorizontalBarDatum {
 interface HorizontalBarChartProps {
   data: HorizontalBarDatum[];
   defaultColor?: string;
-  negativeColor?: string;
   emptyText?: string;
 }
 
 export function HorizontalBarChart({
   data,
-  defaultColor = '#0e7490',
-  negativeColor = '#dc2626',
+  defaultColor = '#0284c7',
   emptyText = 'Belum ada data untuk ditampilkan pada grafik.',
 }: HorizontalBarChartProps) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   if (data.length === 0) {
     return (
-      <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-        {emptyText}
-      </div>
+      <div className="py-8 text-center text-xs text-slate-500">{emptyText}</div>
     );
   }
 
-  const maxAbs = Math.max(
-    1,
-    ...data.map((d) => Math.abs(d.value))
-  );
+  const maxAbs = Math.max(1, ...data.map((d) => Math.abs(d.value)));
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2">
       {data.map((item, idx) => {
         const pct = Math.max(
           item.value === 0 ? 0 : 3,
           Math.min(100, (Math.abs(item.value) / maxAbs) * 100)
         );
-        const isNeg = item.value < 0;
-        const barColor = isNeg ? negativeColor : item.color || defaultColor;
+        const barColor = item.color || defaultColor;
         const isHovered = hoverIdx === idx;
 
         return (
@@ -286,7 +281,7 @@ export function HorizontalBarChart({
             key={`${item.label}-${idx}`}
             onMouseEnter={() => setHoverIdx(idx)}
             onMouseLeave={() => setHoverIdx(null)}
-            className={`group rounded-lg px-2 py-1 transition-colors ${
+            className={`rounded-lg px-2 py-1 transition-colors ${
               isHovered ? 'bg-slate-50 dark:bg-slate-800/60' : ''
             }`}
           >
@@ -302,18 +297,12 @@ export function HorizontalBarChart({
                   {item.label}
                 </span>
                 {item.subLabel && (
-                  <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 shrink-0 hidden sm:inline">
+                  <span className="text-[11px] font-mono text-slate-400 shrink-0 hidden sm:inline">
                     · {item.subLabel}
                   </span>
                 )}
               </div>
-              <span
-                className={`font-mono tabular-nums font-semibold shrink-0 ${
-                  isNeg
-                    ? 'text-red-600 dark:text-red-400'
-                    : 'text-slate-900 dark:text-slate-100'
-                }`}
-              >
+              <span className="font-mono tabular-nums font-semibold shrink-0 text-slate-900 dark:text-slate-100">
                 {item.value.toLocaleString('id-ID', {
                   maximumFractionDigits: 2,
                 })}
@@ -426,16 +415,14 @@ export function DonutChart({
           ))}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-3 pointer-events-none">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate max-w-[100px]">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 truncate max-w-[100px]">
             {hoveredSeg ? hoveredSeg.label : centerTitle}
           </span>
           <span className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
-            {hoveredSeg
-              ? hoveredSeg.value.toLocaleString('id-ID')
-              : centerValue}
+            {hoveredSeg ? hoveredSeg.value.toLocaleString('id-ID') : centerValue}
           </span>
           {hoveredSeg && (
-            <span className="text-[10px] font-mono text-cyan-700 dark:text-cyan-300">
+            <span className="text-[10px] font-mono text-sky-700 dark:text-sky-300">
               {Math.round(hoveredSeg.fraction * 100)}%
             </span>
           )}
@@ -481,8 +468,6 @@ export interface VerticalBarPoint {
   label: string;
   value: number;
   secondaryValue?: number;
-  highlight?: boolean;
-  muted?: boolean;
 }
 
 interface VerticalBarChartProps {
@@ -500,7 +485,7 @@ export function VerticalBarChart({
   data,
   primaryLabel,
   secondaryLabel,
-  primaryColor = '#0e7490',
+  primaryColor = '#16a34a',
   secondaryColor = '#d97706',
   height = 220,
   unit = '',
@@ -519,8 +504,8 @@ export function VerticalBarChart({
 
   if (data.length === 0) {
     return (
-      <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-        Belum ada titik data untuk grafik tren.
+      <div className="py-8 text-center text-xs text-slate-500">
+        Belum ada data untuk grafik batang.
       </div>
     );
   }
@@ -541,8 +526,7 @@ export function VerticalBarChart({
 
   const labelStep = data.length > 18 ? Math.ceil(data.length / 12) : 1;
   const activePoint = hoverIdx !== null ? data[hoverIdx] : null;
-
-  const tickDecimals = maxVal < 20 ? 2 : maxVal < 100 ? 1 : 0;
+  const tickDecimals = maxVal < 20 ? 1 : 0;
 
   return (
     <div className="space-y-2.5">
@@ -574,27 +558,23 @@ export function VerticalBarChart({
           {activePoint ? (
             <span>
               <strong>{activePoint.label}</strong> · {primaryLabel}:{' '}
-              <strong className="text-cyan-700 dark:text-cyan-300">
-                {activePoint.value.toLocaleString('id-ID', {
-                  maximumFractionDigits: 3,
-                })}
+              <strong style={{ color: primaryColor }}>
+                {activePoint.value.toLocaleString('id-ID')}
                 {unit ? ` ${unit}` : ''}
               </strong>
               {secondaryLabel && activePoint.secondaryValue !== undefined && (
                 <>
                   {' '}
                   · {secondaryLabel}:{' '}
-                  <strong className="text-amber-700 dark:text-amber-300">
-                    {activePoint.secondaryValue.toLocaleString('id-ID', {
-                      maximumFractionDigits: 3,
-                    })}
+                  <strong style={{ color: secondaryColor }}>
+                    {activePoint.secondaryValue.toLocaleString('id-ID')}
                     {unit ? ` ${unit}` : ''}
                   </strong>
                 </>
               )}
             </span>
           ) : (
-            <span className="text-slate-400 dark:text-slate-500">
+            <span className="text-slate-400">
               Arahkan kursor untuk detail nilai
             </span>
           )}
@@ -654,7 +634,6 @@ export function VerticalBarChart({
                 onMouseLeave={() => setHoverIdx(null)}
                 className="cursor-pointer"
               >
-                {/* Invisible hit column */}
                 <rect
                   x={padLeft + slotW * idx}
                   y={padTop}
@@ -698,13 +677,7 @@ export function VerticalBarChart({
                     width={barW}
                     height={Math.max(pt.value > 0 ? 2 : 0, h1)}
                     rx={2.5}
-                    fill={
-                      pt.highlight
-                        ? '#4338ca'
-                        : pt.muted
-                        ? '#f59e0b'
-                        : primaryColor
-                    }
+                    fill={primaryColor}
                     opacity={dimmed ? 0.4 : 1}
                     className="transition-opacity duration-150"
                   />
@@ -753,10 +726,10 @@ interface MultiLineChartProps {
 export function MultiLineChart({
   data,
   series,
-  height = 250,
+  height = 240,
   unit = '',
-  decimals = 2,
-  ariaLabel = 'Grafik garis perbandingan target dan realisasi',
+  decimals = 0,
+  ariaLabel = 'Grafik garis tren',
 }: MultiLineChartProps) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -785,8 +758,8 @@ export function MultiLineChart({
 
   if (data.length === 0) {
     return (
-      <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-        Belum ada titik data untuk grafik garis.
+      <div className="py-8 text-center text-xs text-slate-500">
+        Belum ada data untuk grafik garis.
       </div>
     );
   }
@@ -800,7 +773,7 @@ export function MultiLineChart({
   const plotW = svgWidth - padLeft - padRight;
   const plotH = svgHeight - padTop - padBottom;
   const span = Math.max(0.0001, bounds.maxVal - bounds.minVal);
-  const tickDecimals = span < 20 ? 2 : span < 100 ? 1 : 0;
+  const tickDecimals = span < 20 ? 1 : 0;
 
   const getX = (idx: number) =>
     data.length === 1
@@ -811,6 +784,7 @@ export function MultiLineChart({
 
   const activePoint = hoverIdx !== null ? data[hoverIdx] : null;
   const slotW = data.length > 1 ? plotW / data.length : plotW;
+  const labelStep = data.length > 18 ? Math.ceil(data.length / 12) : 1;
 
   return (
     <div className="space-y-3">
@@ -856,8 +830,8 @@ export function MultiLineChart({
               })}
             </span>
           ) : (
-            <span className="text-slate-400 dark:text-slate-500">
-              Arahkan kursor pada bulan untuk detail kurva
+            <span className="text-slate-400">
+              Arahkan kursor pada grafik untuk detail angka
             </span>
           )}
         </div>
@@ -908,12 +882,11 @@ export function MultiLineChart({
               x2={getX(hoverIdx)}
               y1={padTop}
               y2={padTop + plotH}
-              className="stroke-slate-400/70 dark:stroke-slate-600"
+              className="stroke-slate-400/70"
               strokeDasharray="3 3"
             />
           )}
 
-          {/* Series Paths */}
           {series.map((s) => {
             const pts: Array<{ x: number; y: number; val: number; idx: number }> = [];
             data.forEach((pt, idx) => {
@@ -943,7 +916,7 @@ export function MultiLineChart({
                     key={`${s.key}-${p.idx}`}
                     cx={p.x}
                     cy={p.y}
-                    r={hoverIdx === p.idx ? 5 : 3.2}
+                    r={hoverIdx === p.idx ? 5 : 3}
                     fill={s.color}
                     stroke="#ffffff"
                     strokeWidth={1.5}
@@ -953,13 +926,10 @@ export function MultiLineChart({
             );
           })}
 
-          {/* X Axis Labels & Hit Targets */}
           {data.map((pt, idx) => {
             const cx = getX(idx);
             const hitX =
-              data.length === 1
-                ? padLeft
-                : Math.max(padLeft, cx - slotW / 2);
+              data.length === 1 ? padLeft : Math.max(padLeft, cx - slotW / 2);
             const hitW =
               data.length === 1
                 ? plotW
@@ -978,18 +948,20 @@ export function MultiLineChart({
                   height={plotH + 24}
                   fill="transparent"
                 />
-                <text
-                  x={cx}
-                  y={svgHeight - 14}
-                  textAnchor="middle"
-                  className={`text-[10px] font-mono ${
-                    hoverIdx === idx
-                      ? 'fill-cyan-700 dark:fill-cyan-300 font-bold'
-                      : 'fill-slate-500 dark:fill-slate-400'
-                  }`}
-                >
-                  {pt.label}
-                </text>
+                {idx % labelStep === 0 && (
+                  <text
+                    x={cx}
+                    y={svgHeight - 14}
+                    textAnchor="middle"
+                    className={`text-[10px] font-mono ${
+                      hoverIdx === idx
+                        ? 'fill-sky-700 font-bold'
+                        : 'fill-slate-500 dark:fill-slate-400'
+                    }`}
+                  >
+                    {pt.label}
+                  </text>
+                )}
               </g>
             );
           })}
@@ -998,4 +970,3 @@ export function MultiLineChart({
     </div>
   );
 }
-

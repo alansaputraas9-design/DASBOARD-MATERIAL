@@ -1,72 +1,101 @@
 import {
-  ArrowLeftRight,
-  ArrowRight,
-  BellRing,
-  Box,
-  CalendarCheck2,
+  Activity,
+  BarChart3,
   CalendarDays,
   ChevronRight,
-  FileSpreadsheet,
-  Layers,
-  LayoutDashboard,
-  LogOut,
   Moon,
-  RefreshCw,
+  Search,
+  ShieldAlert,
   Sun,
   TrendingUp,
-  UserCheck,
+  Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import kalebajengPlnHeroImg from '../assets/images/kalebajeng_pln_daylight_hero_1795586564030.jpg';
-import { hasMaterialActivity } from '../services/inventoryService';
-import { Material, Project, StockMovement, StockNotification } from '../types/inventory';
+import { fetchBpblTab } from '../services/bpblSheetService';
+import {
+  fetchWarehouseMonthTab,
+  WAREHOUSE_MONTH_TABS,
+} from '../services/warehouseSheetService';
 import { PlnEmblem } from './PlnEmblem';
 
+export type PortalDestination =
+  | { menu: 'warehouse'; section?: string }
+  | { menu: 'bpbl' };
+
 interface PortalHomeViewProps {
-  project: Project | null;
-  projects: Project[];
-  materials: Material[];
-  movements: StockMovement[];
-  notifications: StockNotification[];
   darkMode: boolean;
   onToggleDarkMode: () => void;
-  onSelectProject: (projectId: string) => void;
-  onOpenNewProject: () => void;
-  onNavigateTab: (
-    tab:
-      | 'overview'
-      | 'inventory'
-      | 'movements'
-      | 'notifications'
-      | 'sheets'
-      | 'piket'
-      | 'workbook'
-      | 'kpi'
-  ) => void;
-  onQuickMovement: () => void;
-  onSignOut?: () => void;
+  onNavigate: (dest: PortalDestination) => void;
+}
+
+interface LivePortalStats {
+  warehouseItems: number | null;
+  warehouseMasuk: number | null;
+  warehouseKeluar: number | null;
+  bpblTotal: number | null;
+  bpblSiapMeter: number | null;
 }
 
 export function PortalHomeView({
-  project,
-  projects,
-  materials,
-  movements,
-  notifications,
   darkMode,
   onToggleDarkMode,
-  onSelectProject,
-  onOpenNewProject,
-  onNavigateTab,
-  onQuickMovement,
-  onSignOut,
+  onNavigate,
 }: PortalHomeViewProps) {
   const [now, setNow] = useState(() => new Date());
   const [imgError, setImgError] = useState(false);
+  const [stats, setStats] = useState<LivePortalStats>({
+    warehouseItems: null,
+    warehouseMasuk: null,
+    warehouseKeluar: null,
+    bpblTotal: null,
+    bpblSiapMeter: null,
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const oktTab =
+      WAREHOUSE_MONTH_TABS.find((t) => t.gid === '410640151') ||
+      WAREHOUSE_MONTH_TABS[9];
+
+    Promise.allSettled([
+      fetchWarehouseMonthTab(oktTab),
+      fetchBpblTab('gowa'),
+    ]).then(([whRes, bpblRes]) => {
+      if (!active) return;
+      const next: LivePortalStats = {
+        warehouseItems: null,
+        warehouseMasuk: null,
+        warehouseKeluar: null,
+        bpblTotal: null,
+        bpblSiapMeter: null,
+      };
+      if (whRes.status === 'fulfilled') {
+        const items = whRes.value.items;
+        next.warehouseItems = items.length;
+        next.warehouseMasuk = items.reduce((s, i) => s + i.jumlahMasuk, 0);
+        next.warehouseKeluar = items.reduce((s, i) => s + i.jumlahKeluar, 0);
+      }
+      if (bpblRes.status === 'fulfilled') {
+        const recs = bpblRes.value.records;
+        next.bpblTotal = recs.length;
+        next.bpblSiapMeter = recs.filter(
+          (r) =>
+            r.stage === 'Sudah Terpasang' ||
+            r.stage === 'Aktivasi Meter (Sisa Cetak)'
+        ).length;
+      }
+      setStats(next);
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const timeFormatted = new Intl.DateTimeFormat('id-ID', {
@@ -83,371 +112,202 @@ export function PortalHomeView({
     year: 'numeric',
   }).format(now);
 
-  const totalItems = materials.length;
-  const activeMaterials = materials.filter((m) => hasMaterialActivity(m));
-  const alertCount = activeMaterials.filter(
-    (m) => m.status !== 'nominal' && m.minThreshold > 0
-  ).length;
-  const unresolvedCount = notifications.filter((n) => !n.isResolved).length;
-
-  const totalStokAkhir = materials.reduce(
-    (sum, m) => sum + (m.stokAkhir?.total ?? m.currentStock),
-    0
-  );
-
-  const portalCards = [
+  const menuCards: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    metricText: string;
+    iconBg: string;
+    icon: typeof BarChart3;
+    destination: PortalDestination;
+  }> = [
     {
-      id: 'inventory',
-      title: 'Tabel Stok & Mutasi Gudang',
-      description: 'Stok Awal, Masuk, Keluar & Stok Akhir per bidang (DIST / AGA / TE)',
-      metric: `${activeMaterials.length} Aktif / ${totalItems.toLocaleString('id-ID')}`,
-      metricColor: 'text-indigo-700',
-      icon: <Box className="w-5 h-5 text-indigo-600" />,
-      action: () => onNavigateTab('inventory'),
+      id: 'material-overview',
+      title: 'Monitoring Material Gudang',
+      subtitle: 'Stok awal, masuk, keluar & saldo akhir harian (OKT 2026 gid=410640151)',
+      metricText:
+        stats.warehouseItems !== null
+          ? `${stats.warehouseItems} Item · +${stats.warehouseMasuk?.toLocaleString('id-ID')} / -${stats.warehouseKeluar?.toLocaleString('id-ID')}`
+          : '11 Bulan Live (JAN–NOV 2026)',
+      iconBg: 'bg-cyan-600 text-white',
+      icon: BarChart3,
+      destination: { menu: 'warehouse', section: 'section-charts' },
     },
     {
-      id: 'overview',
-      title: 'Rekapitulasi & Saldo Bidang',
-      description: 'Ringkasan Stok Awal, Masuk, Keluar & Akhir untuk DIST, AGA, TE',
-      metric: `${totalStokAkhir.toLocaleString('id-ID')} Stok Akhir`,
-      metricColor: 'text-emerald-700',
-      icon: <LayoutDashboard className="w-5 h-5 text-sky-700" />,
-      action: () => onNavigateTab('overview'),
+      id: 'tren-tahunan',
+      title: 'Grafik Tren & Perputaran 2026',
+      subtitle: 'Perbandingan arus masuk vs keluar antar bulan & kurva saldo tahunan',
+      metricText: 'JAN 2026 – NOV 2026 · APP & HAR',
+      iconBg: 'bg-indigo-600 text-white',
+      icon: TrendingUp,
+      destination: { menu: 'warehouse', section: 'section-yearly' },
     },
     {
-      id: 'movements',
-      title: 'Log Mutasi Masuk & Keluar',
-      description: 'Riwayat mutasi material per bidang (DIST, AGA, TE) secara real-time',
-      metric: `${movements.length.toLocaleString('id-ID')} Log`,
-      metricColor: 'text-sky-700',
-      icon: <ArrowLeftRight className="w-5 h-5 text-sky-600" />,
-      action: () => onNavigateTab('movements'),
+      id: 'pencarian-item',
+      title: 'Daftar Pencarian & Mutasi Item',
+      subtitle: 'Cari kode/nama material, rincian harian tgl 1–31 & log transaksi',
+      metricText:
+        stats.warehouseItems !== null
+          ? `${stats.warehouseItems} Material Terdaftar`
+          : 'Katalog APP & HAR',
+      iconBg: 'bg-sky-600 text-white',
+      icon: Search,
+      destination: { menu: 'warehouse', section: 'section-search' },
     },
     {
-      id: 'notifications',
-      title: 'Notifikasi Stok Otomatis',
-      description: 'Peringatan material aktif menipis, kritis, atau habis secara real-time',
-      metric: unresolvedCount > 0 ? `${unresolvedCount} Alert` : 'Aman',
-      metricColor: unresolvedCount > 0 ? 'text-red-600' : 'text-emerald-700',
-      icon: (
-        <BellRing
-          className={`w-5 h-5 ${
-            unresolvedCount > 0 ? 'text-red-600' : 'text-emerald-600'
-          }`}
-        />
-      ),
-      action: () => onNavigateTab('notifications'),
+      id: 'safety-stock',
+      title: 'Simulasi Safety Stock & ROP',
+      subtitle: 'Proyeksi ketahanan stok 30 hari, lead time & ambang pemesanan ulang',
+      metricText: 'Kalkulator Lead Time & Service Level Z',
+      iconBg: 'bg-amber-500 text-white',
+      icon: ShieldAlert,
+      destination: { menu: 'warehouse', section: 'section-safety' },
     },
     {
-      id: 'sheets',
-      title: 'Sumber Spreadsheet CSV Live',
-      description: 'Sinkronisasi & bangun ulang dari CSV publik Gd Ry Sinjai tanpa OAuth',
-      metric: 'CSV Live · Gd Ry Sinjai',
-      metricColor: 'text-emerald-700',
-      icon: <FileSpreadsheet className="w-5 h-5 text-emerald-600" />,
-      action: () => onNavigateTab('sheets'),
-    },
-    {
-      id: 'piket',
-      title: 'Jadwal Piket ULP Sinjai (Form C1.A)',
-      description: 'Jadwal penugasan piket/shift/kategori P21B khusus (gid: 418796009)',
-      metric: 'PIKET · 418796009',
-      metricColor: 'text-amber-700',
-      icon: <CalendarCheck2 className="w-5 h-5 text-amber-600" />,
-      action: () => onNavigateTab('piket'),
-    },
-    {
-      id: 'kpi',
-      title: 'KPI Pelanggan, MVA, BP & Saldo',
-      description: 'Grafik target vs realisasi Delta Pelanggan, MVA, BP & Saldo (4 Tab)',
-      metric: 'KPI Live · gid=0',
-      metricColor: 'text-sky-700',
-      icon: <TrendingUp className="w-5 h-5 text-sky-600" />,
-      action: () => onNavigateTab('kpi'),
+      id: 'data-bpbl',
+      title: 'Data BPBL T.A 2026',
+      subtitle: 'Calon penerima & progres penyambungan 900 VA wilayah Kab. Gowa (ULP Kalebajeng)',
+      metricText:
+        stats.bpblTotal !== null
+          ? `${stats.bpblTotal} Penerima Gowa · ${stats.bpblSiapMeter} Meter Siap`
+          : 'Kab. Gowa · gid=1826313696',
+      iconBg: 'bg-emerald-600 text-white',
+      icon: Zap,
+      destination: { menu: 'bpbl' },
     },
   ];
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden flex flex-col justify-between bg-gradient-to-br from-sky-100 via-cyan-50 to-white text-slate-900">
+    <div className="relative min-h-screen w-full overflow-x-hidden flex flex-col justify-between bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {!imgError && (
         <img
           src={kalebajengPlnHeroImg}
-          alt="Panorama Cerah Arsitektur Balla Lompoa Wilayah Kalebajeng, Persawahan Hijau Gowa, dan Gardu Listrik PLN di bawah Langit Cerah"
+          alt="Panorama Cerah Arsitektur Kalebajeng, Persawahan Gowa, dan Jaringan Listrik PLN"
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
-          className="absolute inset-0 w-full h-full object-cover object-center brightness-105 contrast-[0.98] select-none pointer-events-none"
+          className="fixed inset-0 w-full h-full object-cover object-center brightness-105 contrast-[0.98] select-none pointer-events-none"
         />
       )}
 
-      {/* Bright Daylight Wash & Warm Sunbeam Overlay */}
+      {/* Measured Scrim for High Readability */}
       <div
-        className="absolute inset-0 bg-gradient-to-b from-white/70 via-sky-50/10 to-white/85 pointer-events-none"
-        aria-hidden="true"
-      />
-      <div
-        className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(254,240,138,0.48),rgba(186,230,253,0.18)_48%,transparent_78%)] pointer-events-none"
+        className="fixed inset-0 bg-gradient-to-b from-white/80 via-sky-50/45 to-white/85 dark:from-slate-950/85 dark:via-slate-950/75 dark:to-slate-950/90 pointer-events-none"
         aria-hidden="true"
       />
 
-      {/* Top Portal Header — Pojok Kiri Atas dengan Lambang PLN & Semboyan */}
-      <header className="relative z-20 px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 flex flex-col xl:flex-row xl:items-start justify-between gap-4">
-        <div className="flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/92 backdrop-blur-md border border-sky-200/90 shadow-sm min-w-0">
+      {/* Top Portal Header */}
+      <header className="relative z-20 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 pt-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 px-4 py-3 rounded-2xl bg-white/92 dark:bg-slate-900/92 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-sm min-w-0">
           <PlnEmblem size="lg" />
           <div className="min-w-0">
-            <div className="flex items-center flex-wrap gap-x-2.5 gap-y-0.5">
-              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 uppercase leading-none font-display">
-                Dasbor Monitoring Material PLN
-              </h1>
-              <span className="text-xs font-semibold font-mono text-sky-700 tracking-wide">
-                · REAL-TIME DB
+            <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-tight font-display">
+              Dashboard Operasional &amp; Material PLN Kalebajeng
+            </h1>
+            <div className="mt-1 flex items-center flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <span className="font-semibold text-cyan-700 dark:text-cyan-400">
+                UP3 Makassar Selatan
               </span>
-            </div>
-            <div className="mt-1 text-xs sm:text-sm font-bold tracking-wide text-amber-600 font-display">
-              Terang, Benderang, Yess
-            </div>
-            <div className="mt-1 flex items-center flex-wrap gap-2 text-xs text-slate-600">
-              <span className="font-semibold text-sky-800 truncate max-w-xs sm:max-w-md">
-                {project?.name || 'Gd Ry Sinjai — Monitoring Material'}
+              <span aria-hidden="true">·</span>
+              <span>ULP Kalebajeng</span>
+              <span aria-hidden="true">·</span>
+              <span className="font-semibold text-amber-600 dark:text-amber-400">
+                Terang, Benderang, Yess
               </span>
-              {project?.location && (
-                <>
-                  <span aria-hidden="true" className="text-slate-300">·</span>
-                  <span className="text-slate-600 truncate">{project.location}</span>
-                </>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Live Operational Light Glass Widgets */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="px-3 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-sky-200/80 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold font-mono leading-none">
-              Waktu Lokal
-            </div>
-            <div className="text-sm font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
-              {timeFormatted}
-            </div>
-          </div>
-
-          <div className="px-3 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-sky-200/80 shadow-sm">
-            <div className="text-[10px] uppercase tracking-wider text-slate-600 font-bold font-mono leading-none flex items-center gap-1">
-              <CalendarDays className="w-3 h-3 text-sky-700" />
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="px-3.5 py-2 rounded-xl bg-white/92 dark:bg-slate-900/92 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-sm">
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-none flex items-center gap-1.5">
+              <CalendarDays className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
               <span>{dateFormatted}</span>
             </div>
-            <div className="text-xs font-semibold text-slate-950 leading-tight mt-0.5 flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span className="truncate max-w-[160px]">
-                PJ: {project?.managerName || 'Admin Gudang'}
-              </span>
+            <div className="text-base font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums leading-tight mt-1">
+              {timeFormatted} WITA
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => onNavigateTab('sheets')}
-            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-emerald-500 shadow-sm transition-all text-left group flex items-center gap-2"
+            onClick={() => onNavigate({ menu: 'warehouse' })}
+            className="px-4 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm transition-colors text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap shrink-0"
           >
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-emerald-800 font-bold font-mono leading-none flex items-center gap-1">
-                <FileSpreadsheet className="w-3 h-3 text-emerald-700" />
-                <span>Google Sheet CSV</span>
-              </div>
-              <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
-                Gd Ry Sinjai · Live
-              </div>
-            </div>
-            <RefreshCw className="w-3.5 h-3.5 text-emerald-700 group-hover:rotate-45 transition-transform" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigateTab('piket')}
-            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-amber-500 shadow-sm transition-all text-left group flex items-center gap-2"
-          >
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-amber-800 font-bold font-mono leading-none flex items-center gap-1">
-                <CalendarCheck2 className="w-3 h-3 text-amber-700" />
-                <span>Sheet PIKET</span>
-              </div>
-              <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
-                Form C1.A · 418796009
-              </div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigateTab('workbook')}
-            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-indigo-500 shadow-sm transition-all text-left group flex items-center gap-2"
-          >
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-indigo-800 font-bold font-mono leading-none flex items-center gap-1">
-                <Layers className="w-3 h-3 text-indigo-700" />
-                <span>Workbook Sheet</span>
-              </div>
-              <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
-                10 Sheet · 4 Kelompok
-              </div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onNavigateTab('kpi')}
-            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white backdrop-blur-md border border-sky-200/80 hover:border-sky-500 shadow-sm transition-all text-left group flex items-center gap-2"
-          >
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-sky-800 font-bold font-mono leading-none flex items-center gap-1">
-                <TrendingUp className="w-3 h-3 text-sky-700" />
-                <span>KPI &amp; Grafik</span>
-              </div>
-              <div className="text-xs font-bold text-slate-950 font-mono tabular-nums leading-tight mt-0.5">
-                Pelanggan &amp; MVA
-              </div>
-            </div>
-          </button>
-
-          {projects.length > 0 && (
-            <select
-              aria-label="Pilih proyek aktif"
-              value={project?.id || ''}
-              onChange={(e) => onSelectProject(e.target.value)}
-              className="px-3 py-2 rounded-xl bg-white/92 backdrop-blur-md border border-sky-200/85 text-xs font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500 max-w-[200px]"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <button
-            type="button"
-            onClick={onQuickMovement}
-            className="px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold shadow-sm transition-colors whitespace-nowrap"
-          >
-            Catat Mutasi
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenNewProject}
-            className="px-3 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
-          >
-            + Gudang
+            <Activity className="w-4 h-4 shrink-0" />
+            <span>Buka Workspace</span>
           </button>
         </div>
       </header>
 
-      {/* Live Alert Strip */}
-      <div className="relative z-10 flex-1 min-h-[140px] sm:min-h-[190px] lg:min-h-[220px] flex items-end px-4 sm:px-6 lg:px-8 pb-4">
-        {alertCount > 0 && (
-          <button
-            type="button"
-            onClick={() => onNavigateTab('notifications')}
-            className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-rose-50/95 hover:bg-rose-100 backdrop-blur-md border border-rose-300 text-xs text-rose-900 shadow-sm transition-colors"
-          >
-            <BellRing className="w-4 h-4 text-rose-600 shrink-0" />
-            <span>
-              <strong className="font-mono tabular-nums">{alertCount}</strong> material aktif berada di bawah ambang batas stok aman
-            </span>
-            <ArrowRight className="w-3.5 h-3.5 text-rose-600" />
-          </button>
-        )}
-      </div>
-
-      {/* Bottom Command Portal Grid */}
-      <section
-        aria-label="Menu Utama Modul"
-        className="relative z-20 px-4 sm:px-6 lg:px-8 pb-5 pt-2 space-y-3"
-      >
-        <button
-          type="button"
-          onClick={() => onNavigateTab('workbook')}
-          className="w-full group text-left px-4 py-3 rounded-xl bg-white/92 hover:bg-white backdrop-blur-md border border-sky-300/85 hover:border-sky-500 transition-all duration-200 shadow-sm hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="shrink-0 w-10 h-10 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center">
-              <Layers className="w-5 h-5 text-sky-700" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-tight">
-                Rekap Workbook Material &amp; Mutasi (10 Sheet Terlampir)
+      {/* Main Portal Menu Launcher Grid (ulpsinjai.netlify.app aesthetic) */}
+      <main className="relative z-20 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 flex flex-col justify-center">
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 px-1">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 font-display">
+                Menu Operasional &amp; Monitoring Utama
               </h2>
-              <p className="text-[11px] text-slate-600 truncate mt-0.5">
-                Dikelompokkan per sheet: Varian Material, STOK (referensi), MATERIAL MASUK, MATERIAL KELUAR, Sheet5, Sheet4, Sheet1 (1) &amp; Sheet1–3
+              <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+                Pilih modul pemantauan gudang KBJ-Bahagia atau progres penyambungan BPBL 2026 langsung dari Google Spreadsheet live.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0 text-xs font-mono font-semibold text-sky-700">
-            <span>Buka 10 Sheet</span>
-            <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-          </div>
-        </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-          {portalCards.map((card) => (
-            <button
-              key={card.id}
-              type="button"
-              onClick={card.action}
-              className="group text-left px-3.5 py-3 rounded-xl bg-white/92 hover:bg-white backdrop-blur-md border border-sky-200/75 hover:border-sky-500 transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 flex items-center gap-3"
-            >
-              <div className="shrink-0 w-10 h-10 rounded-lg bg-sky-50/80 border border-sky-100 flex items-center justify-center shadow-2xs">
-                {card.icon}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
-                  <h2 className="text-xs sm:text-[13px] font-bold text-slate-950 group-hover:text-sky-800 uppercase tracking-tight leading-snug truncate">
-                    {card.title}
-                  </h2>
-                  <span
-                    className={`text-[11px] font-bold font-mono tabular-nums whitespace-nowrap shrink-0 ${card.metricColor}`}
-                  >
-                    {card.metric}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-600 font-medium truncate mt-0.5">
-                  {card.description}
-                </p>
-              </div>
-              <div className="shrink-0 w-6 h-6 rounded-lg bg-sky-100/80 group-hover:bg-sky-600 text-sky-700 group-hover:text-white flex items-center justify-center transition-colors">
-                <ChevronRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-              </div>
-            </button>
-          ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {menuCards.map((card) => {
+              const Icon = card.icon;
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => onNavigate(card.destination)}
+                  className="group text-left bg-white/92 dark:bg-slate-900/92 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 hover:border-cyan-400 dark:hover:border-cyan-500 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-150 flex items-center justify-between gap-4"
+                >
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${card.iconBg}`}
+                    >
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 group-hover:text-cyan-700 dark:group-hover:text-cyan-400 transition-colors leading-snug">
+                        {card.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed line-clamp-2">
+                        {card.subtitle}
+                      </p>
+                      <div className="pt-0.5 text-xs font-mono tabular-nums font-semibold text-cyan-700 dark:text-cyan-400 truncate">
+                        {card.metricText}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-cyan-600 text-slate-500 dark:text-slate-400 group-hover:text-white flex items-center justify-center shrink-0 transition-colors">
+                    <ChevronRight className="w-4 h-4" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </main>
+
+      {/* Quiet Footer */}
+      <footer className="relative z-20 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 pb-5 flex items-center justify-between gap-3 text-xs text-slate-700 dark:text-slate-300">
+        <div className="px-3.5 py-2 rounded-xl bg-white/88 dark:bg-slate-900/88 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 shadow-2xs truncate">
+          © 2026 <strong className="text-slate-900 dark:text-slate-100">PLN ULP Kalebajeng</strong> · UP3 Makassar Selatan
         </div>
 
-        <footer className="px-1 pt-1 flex items-center justify-between text-[11px] text-slate-700 gap-3">
-          <div className="truncate">
-            © 2026 <span className="font-bold text-slate-900">PLN ULP Sinjai · BinaLogistik</span> · Monitoring Material Gd Ry Sinjai Real-Time
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={onToggleDarkMode}
-              title={darkMode ? 'Mode Terang' : 'Mode Gelap'}
-              aria-label="Ubah tema tampilan"
-              className="w-8 h-8 rounded-full bg-white/90 hover:bg-sky-600 text-slate-700 hover:text-white backdrop-blur-md border border-sky-200 shadow-xs flex items-center justify-center transition-colors"
-            >
-              {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-            </button>
-            {onSignOut && (
-              <button
-                type="button"
-                onClick={onSignOut}
-                title="Keluar"
-                aria-label="Keluar akun"
-                className="w-8 h-8 rounded-full bg-white/90 hover:bg-red-600 text-slate-700 hover:text-white backdrop-blur-md border border-sky-200 shadow-xs flex items-center justify-center transition-colors"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        </footer>
-      </section>
+        <button
+          type="button"
+          onClick={onToggleDarkMode}
+          aria-label={darkMode ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/92 dark:bg-slate-900/92 hover:bg-cyan-600 hover:text-white text-slate-700 dark:text-slate-200 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 shadow-xs text-xs font-medium transition-colors shrink-0"
+        >
+          {darkMode ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          <span>{darkMode ? 'Mode Terang' : 'Mode Gelap'}</span>
+        </button>
+      </footer>
     </div>
   );
 }
