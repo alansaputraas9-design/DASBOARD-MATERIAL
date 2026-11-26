@@ -1,4 +1,4 @@
-import { parseGoogleSheetUrl } from './sheetsService';
+import { fetchPublicGoogleSheetCsv, parseGoogleSheetUrl } from './sheetsService';
 
 export const BPBL_SPREADSHEET_ID = '1yo4S21g-YaG9lMIlCd82g-ZENcMeG9eh';
 
@@ -403,21 +403,11 @@ export async function fetchBpblTab(
     }
   }
 
-  const baseUrl = getBpblCsvUrl(gid, spreadsheetId);
-  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error(
-      `Gagal mengunduh data spreadsheet BPBL (${meta.name}, HTTP ${res.status}). Pastikan akses publik spreadsheet aktif.`
-    );
-  }
-
-  const csvText = await res.text();
-  if (csvText.trim().startsWith('<!DOCTYPE') || csvText.trim().startsWith('<html')) {
-    throw new Error(
-      `Spreadsheet (${meta.name}) mengembalikan halaman HTML, bukan CSV. Pastikan tautan dibagikan publik.`
-    );
-  }
+  const csvText = await fetchPublicGoogleSheetCsv(
+    spreadsheetId,
+    gid,
+    meta.name
+  );
 
   return parseBpblCsvText(csvText, meta);
 }

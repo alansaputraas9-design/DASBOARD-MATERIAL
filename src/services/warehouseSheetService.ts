@@ -1,3 +1,5 @@
+import { fetchPublicGoogleSheetCsv } from './sheetsService';
+
 export const WAREHOUSE_SPREADSHEET_ID = '1Wqq2Hlfa21ivgNH6My-1SxX338TYNbH7O9uuJ5f9AeA';
 
 export const WAREHOUSE_SPREADSHEET_EDIT_URL =
@@ -452,21 +454,11 @@ export async function fetchWarehouseMonthTab(
     targetTab = tabOrUrl;
   }
 
-  const baseUrl = getWarehouseCsvUrl(targetTab.gid, spreadsheetId);
-  const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_ts=${Date.now()}`;
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) {
-    throw new Error(
-      `Gagal mengunduh tab ${targetTab.label} (HTTP ${res.status}). Pastikan spreadsheet dibagikan publik.`
-    );
-  }
-
-  const csvText = await res.text();
-  if (csvText.trim().startsWith('<!DOCTYPE') || csvText.trim().startsWith('<html')) {
-    throw new Error(
-      `Spreadsheet tab ${targetTab.label} mengembalikan halaman HTML. Pastikan akses link publik aktif.`
-    );
-  }
+  const csvText = await fetchPublicGoogleSheetCsv(
+    spreadsheetId,
+    targetTab.gid,
+    targetTab.label
+  );
 
   return parseWarehousePeriodCsv(csvText, targetTab);
 }
