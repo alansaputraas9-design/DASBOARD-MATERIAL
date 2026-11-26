@@ -12,7 +12,6 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import kalebajengPlnHeroImg from '../assets/images/kalebajeng_pln_daylight_hero_1795586564030.jpg';
 import { fetchBpblPusatData } from '../services/bpblPusatService';
 import { fetchBpblTab } from '../services/bpblSheetService';
 import {
@@ -226,10 +225,10 @@ export function PortalHomeView({
   ];
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-hidden flex flex-col justify-between bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+    <div className="relative min-h-screen w-full overflow-x-hidden flex flex-col justify-between bg-gradient-to-br from-sky-100 via-cyan-50 to-emerald-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
       {!imgError && (
         <img
-          src={kalebajengPlnHeroImg}
+          src="/assets/images/kalebajeng_pln_daylight_hero_1795586564030.jpg"
           alt="Panorama Cerah Arsitektur Kalebajeng, Persawahan Gowa, dan Jaringan Listrik PLN"
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
