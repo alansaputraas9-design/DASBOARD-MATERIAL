@@ -6,16 +6,18 @@ import {
   Menu,
   Moon,
   Sun,
+  Users,
   X,
   Zap,
 } from 'lucide-react';
 import { Component, ReactNode, useEffect, useState } from 'react';
+import { BpblPusatSection } from './components/BpblPusatSection';
 import { BpblSheetSection } from './components/BpblSheetSection';
 import { PlnEmblem } from './components/PlnEmblem';
 import { PortalDestination, PortalHomeView } from './components/PortalHomeView';
 import { WarehouseDashboard } from './components/WarehouseDashboard';
 
-type ActiveView = 'home' | 'warehouse' | 'bpbl';
+type ActiveView = 'home' | 'warehouse' | 'bpbl' | 'bpbl-pusat';
 
 class AppErrorBoundary extends Component<
   { children: ReactNode },
@@ -84,6 +86,9 @@ function DashboardShell() {
     if (dest.menu === 'warehouse') {
       setInitialSection(dest.section);
       setActiveView('warehouse');
+    } else if (dest.menu === 'bpbl-pusat') {
+      setInitialSection(undefined);
+      setActiveView('bpbl-pusat');
     } else {
       setInitialSection(undefined);
       setActiveView('bpbl');
@@ -131,11 +136,19 @@ function DashboardShell() {
       sublabel: 'Penerima & Sambungan 900 VA',
       icon: Zap,
     },
+    {
+      id: 'bpbl-pusat',
+      label: 'BPBL Pusat 2026',
+      sublabel: 'Anggaran Pusat ULP KBJ',
+      icon: Users,
+    },
   ];
 
   const activeBreadcrumbLabel =
     activeView === 'warehouse'
       ? 'Material & Grafik Gudang'
+      : activeView === 'bpbl-pusat'
+      ? 'BPBL Anggaran Pusat 2026'
       : 'Data BPBL T.A 2026';
 
   return (
@@ -336,6 +349,10 @@ function DashboardShell() {
         <div className="flex-1 min-w-0">
           {activeView === 'warehouse' ? (
             <WarehouseDashboard initialSection={initialSection} />
+          ) : activeView === 'bpbl-pusat' ? (
+            <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
+              <BpblPusatSection />
+            </main>
           ) : (
             <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
               <BpblSheetSection />

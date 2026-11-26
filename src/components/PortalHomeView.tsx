@@ -8,10 +8,12 @@ import {
   ShieldAlert,
   Sun,
   TrendingUp,
+  Users,
   Zap,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import kalebajengPlnHeroImg from '../assets/images/kalebajeng_pln_daylight_hero_1795586564030.jpg';
+import { fetchBpblPusatData } from '../services/bpblPusatService';
 import { fetchBpblTab } from '../services/bpblSheetService';
 import {
   fetchWarehouseMonthTab,
@@ -21,7 +23,8 @@ import { PlnEmblem } from './PlnEmblem';
 
 export type PortalDestination =
   | { menu: 'warehouse'; section?: string }
-  | { menu: 'bpbl' };
+  | { menu: 'bpbl' }
+  | { menu: 'bpbl-pusat' };
 
 interface PortalHomeViewProps {
   darkMode: boolean;
@@ -35,6 +38,9 @@ interface LivePortalStats {
   warehouseKeluar: number | null;
   bpblTotal: number | null;
   bpblSiapMeter: number | null;
+  bpblPusatTotal: number | null;
+  bpblPusatKecamatan: number | null;
+  bpblPusatDesa: number | null;
 }
 
 export function PortalHomeView({
@@ -50,6 +56,9 @@ export function PortalHomeView({
     warehouseKeluar: null,
     bpblTotal: null,
     bpblSiapMeter: null,
+    bpblPusatTotal: null,
+    bpblPusatKecamatan: null,
+    bpblPusatDesa: null,
   });
 
   useEffect(() => {
@@ -67,7 +76,8 @@ export function PortalHomeView({
       Promise.allSettled([
         fetchWarehouseMonthTab(oktTab),
         fetchBpblTab('gowa'),
-      ]).then(([whRes, bpblRes]) => {
+        fetchBpblPusatData(),
+      ]).then(([whRes, bpblRes, pusatRes]) => {
         if (!active) return;
         const next: LivePortalStats = {
           warehouseItems: null,
@@ -75,6 +85,9 @@ export function PortalHomeView({
           warehouseKeluar: null,
           bpblTotal: null,
           bpblSiapMeter: null,
+          bpblPusatTotal: null,
+          bpblPusatKecamatan: null,
+          bpblPusatDesa: null,
         };
         if (whRes.status === 'fulfilled') {
           const items = whRes.value.items;
@@ -90,6 +103,14 @@ export function PortalHomeView({
               r.stage === 'Sudah Terpasang' ||
               r.stage === 'Aktivasi Meter (Sisa Cetak)'
           ).length;
+        }
+        if (pusatRes.status === 'fulfilled') {
+          const recs = pusatRes.value.records;
+          next.bpblPusatTotal = recs.length;
+          next.bpblPusatKecamatan = new Set(recs.map((r) => r.kecamatan)).size;
+          next.bpblPusatDesa = new Set(
+            recs.map((r) => `${r.kecamatan}::${r.desaKelurahan}`)
+          ).size;
         }
         setStats(next);
       });
@@ -189,6 +210,18 @@ export function PortalHomeView({
       iconBg: 'bg-emerald-600 text-white',
       icon: Zap,
       destination: { menu: 'bpbl' },
+    },
+    {
+      id: 'data-bpbl-pusat',
+      title: 'BPBL Anggaran Pusat 2026',
+      subtitle: 'Rekap & pengelompokan pelanggan BPBL ULP Kalebajeng per kecamatan, desa & sumber data',
+      metricText:
+        stats.bpblPusatTotal !== null
+          ? `${stats.bpblPusatTotal} Pelanggan · ${stats.bpblPusatKecamatan} Kec · ${stats.bpblPusatDesa} Desa`
+          : 'BPBL ULP KBJ · gid=0',
+      iconBg: 'bg-teal-600 text-white',
+      icon: Users,
+      destination: { menu: 'bpbl-pusat' },
     },
   ];
 
